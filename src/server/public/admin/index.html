@@ -609,7 +609,7 @@
                 <!-- Capabilities -->
                 <div class="col-span-12">
                     <div class="section-header">
-                        <h2>Capabilities</h2>
+                        <h2>Core Capabilities</h2>
                     </div>
                     <div class="card">
                         <div class="form-group">
@@ -629,6 +629,101 @@
                         <div class="form-group">
                             <label>Obsidian Vault</label>
                             <input type="text" id="obsidian-path" placeholder="Path to your vault">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced Features -->
+                <div class="col-span-12">
+                    <div class="section-header">
+                        <h2>Advanced Features</h2>
+                        <span class="badge">v2.1</span>
+                    </div>
+                    <div class="card">
+                        <div class="form-group">
+                            <label>Browser Automation</label>
+                            <select id="browser-enabled">
+                                <option value="true">Enabled</option>
+                                <option value="false">Disabled</option>
+                            </select>
+                            <p style="font-size: 0.7rem; color: var(--secondary); margin-top: 0.3rem;">
+                                Navigate websites, fill forms, take screenshots (Requires Level 3+)
+                            </p>
+                        </div>
+                        <div class="form-group">
+                            <label>File System Access</label>
+                            <select id="filesystem-enabled">
+                                <option value="true">Enabled</option>
+                                <option value="false">Disabled</option>
+                            </select>
+                            <p style="font-size: 0.7rem; color: var(--secondary); margin-top: 0.3rem;">
+                                Read, write, manage files (Requires Level 2+)
+                            </p>
+                        </div>
+                        <div class="form-group">
+                            <label>Self-Modification ⚠️</label>
+                            <select id="selfmod-enabled">
+                                <option value="true">Enabled</option>
+                                <option value="false">Disabled</option>
+                            </select>
+                            <p style="font-size: 0.7rem; color: var(--error); margin-top: 0.3rem;">
+                                CAUTION: Agent can modify own config (Requires Level 4)
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Permission System -->
+                <div class="col-span-12">
+                    <div class="section-header">
+                        <h2>Permission System</h2>
+                        <span class="badge" id="permission-badge">Level 2</span>
+                    </div>
+                    <div class="card">
+                        <div class="form-group">
+                            <label>Maximum Permission Level</label>
+                            <select id="permission-level">
+                                <option value="1">Level 1 - READ_ONLY (Safest)</option>
+                                <option value="2">Level 2 - WRITE_SAFE (Recommended)</option>
+                                <option value="3">Level 3 - EXECUTE_SAFE (Automation)</option>
+                                <option value="4">Level 4 - PRIVILEGED (Full Access)</option>
+                            </select>
+                            <p style="font-size: 0.7rem; color: var(--secondary); margin-top: 0.3rem;">
+                                Controls what operations the agent can perform
+                            </p>
+                        </div>
+                        <div class="form-group">
+                            <label>Allowed Directories (whitelist)</label>
+                            <textarea id="allowed-dirs" rows="2" placeholder="./data, ./logs, ./tmp"></textarea>
+                            <p style="font-size: 0.7rem; color: var(--secondary); margin-top: 0.3rem;">
+                                Comma-separated paths where file operations are allowed
+                            </p>
+                        </div>
+                        <div class="form-group">
+                            <label>Denied Directories (blacklist)</label>
+                            <textarea id="denied-dirs" rows="2" placeholder="./src, ./node_modules, ./.git"></textarea>
+                            <p style="font-size: 0.7rem; color: var(--secondary); margin-top: 0.3rem;">
+                                Comma-separated paths that are always forbidden
+                            </p>
+                        </div>
+                        <div class="form-group">
+                            <label>Allowed Domains (browser)</label>
+                            <textarea id="allowed-domains" rows="2" placeholder="*.github.com, example.com"></textarea>
+                            <p style="font-size: 0.7rem; color: var(--secondary); margin-top: 0.3rem;">
+                                Leave empty to allow all domains. Use * for wildcards
+                            </p>
+                        </div>
+                        <div class="form-group">
+                            <label>Require Approval Level</label>
+                            <select id="approval-level">
+                                <option value="">No approval required</option>
+                                <option value="2">Level 2+</option>
+                                <option value="3">Level 3+</option>
+                                <option value="4">Level 4 only</option>
+                            </select>
+                            <p style="font-size: 0.7rem; color: var(--secondary); margin-top: 0.3rem;">
+                                Operations at or above this level will require user confirmation
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -749,8 +844,8 @@
                         </div>
                     </div>
                     <div style="width: 250px;">
-                        <input type="password" value="${p.apiKey || p.googleApiKey || ''}" 
-                               onchange="updateProviderKey(${i}, this.value)" 
+                        <input type="password" value="${p.apiKey || p.googleApiKey || ''}"
+                               onchange="updateProviderKey(${i}, this.value)"
                                placeholder="API Key">
                     </div>
                 `;
@@ -758,14 +853,66 @@
             });
             document.getElementById('provider-count').textContent = config.providers.length;
 
-            // Simple UI Mapping
+            // Core capabilities
             const tg = config.channels.telegram || {};
             document.getElementById('telegram-token').value = tg.token || '';
             document.getElementById('authorized-users').value = (tg.authorizedUsers || []).join(', ');
             document.getElementById('memory-enabled').value = String(config.memory.enabled);
             document.getElementById('tools-enabled').value = String(config.tools.enabled);
             document.getElementById('obsidian-path').value = config.obsidian.vaultPath || '';
+
+            // Advanced features
+            document.getElementById('browser-enabled').value = String(config.browser?.enabled || false);
+            document.getElementById('filesystem-enabled').value = String(config.filesystem?.enabled || false);
+            document.getElementById('selfmod-enabled').value = String(config.selfModification?.enabled || false);
+
+            // Permission system
+            const perms = config.permissions || { maxLevel: 2 };
+            document.getElementById('permission-level').value = String(perms.maxLevel || 2);
+            document.getElementById('allowed-dirs').value = (perms.allowedDirectories || []).join(', ');
+            document.getElementById('denied-dirs').value = (perms.deniedDirectories || []).join(', ');
+            document.getElementById('allowed-domains').value = (perms.allowedDomains || []).join(', ');
+            document.getElementById('approval-level').value = String(perms.requireApprovalLevel || '');
+
+            // Update permission badge
+            updatePermissionBadge(perms.maxLevel || 2);
         }
+
+        function updatePermissionBadge(level) {
+            const badge = document.getElementById('permission-badge');
+            const labels = {
+                1: 'Level 1 - READ_ONLY',
+                2: 'Level 2 - WRITE_SAFE',
+                3: 'Level 3 - EXECUTE_SAFE',
+                4: 'Level 4 - PRIVILEGED'
+            };
+            badge.textContent = labels[level] || 'Level 2';
+
+            // Update color based on level
+            if (level >= 4) {
+                badge.style.background = 'rgba(239, 68, 68, 0.1)';
+                badge.style.color = 'var(--error)';
+                badge.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+            } else if (level >= 3) {
+                badge.style.background = 'rgba(251, 191, 36, 0.1)';
+                badge.style.color = '#fbbf24';
+                badge.style.borderColor = 'rgba(251, 191, 36, 0.2)';
+            } else {
+                badge.style.background = 'rgba(16, 185, 129, 0.1)';
+                badge.style.color = 'var(--success)';
+                badge.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+            }
+        }
+
+        // Update permission badge when level changes
+        document.addEventListener('DOMContentLoaded', () => {
+            const levelSelect = document.getElementById('permission-level');
+            if (levelSelect) {
+                levelSelect.addEventListener('change', (e) => {
+                    updatePermissionBadge(parseInt(e.target.value));
+                });
+            }
+        });
 
         function updateProviderKey(index, value) {
             const p = config.providers[index];
@@ -779,6 +926,7 @@
             saveBtn.textContent = 'Saving...';
 
             try {
+                // Core capabilities
                 config.channels.telegram.token = document.getElementById('telegram-token').value;
                 config.channels.telegram.authorizedUsers = document.getElementById('authorized-users').value
                     .split(',')
@@ -788,6 +936,46 @@
                 config.memory.enabled = document.getElementById('memory-enabled').value === 'true';
                 config.tools.enabled = document.getElementById('tools-enabled').value === 'true';
                 config.obsidian.vaultPath = document.getElementById('obsidian-path').value;
+
+                // Advanced features
+                if (!config.browser) config.browser = {};
+                config.browser.enabled = document.getElementById('browser-enabled').value === 'true';
+
+                if (!config.filesystem) config.filesystem = {};
+                config.filesystem.enabled = document.getElementById('filesystem-enabled').value === 'true';
+
+                if (!config.selfModification) config.selfModification = {};
+                config.selfModification.enabled = document.getElementById('selfmod-enabled').value === 'true';
+
+                // Permission system
+                if (!config.permissions) config.permissions = {};
+                config.permissions.maxLevel = parseInt(document.getElementById('permission-level').value);
+
+                // Parse allowed directories
+                const allowedDirsText = document.getElementById('allowed-dirs').value.trim();
+                config.permissions.allowedDirectories = allowedDirsText
+                    ? allowedDirsText.split(',').map(s => s.trim()).filter(s => s)
+                    : [];
+
+                // Parse denied directories
+                const deniedDirsText = document.getElementById('denied-dirs').value.trim();
+                config.permissions.deniedDirectories = deniedDirsText
+                    ? deniedDirsText.split(',').map(s => s.trim()).filter(s => s)
+                    : [];
+
+                // Parse allowed domains
+                const allowedDomainsText = document.getElementById('allowed-domains').value.trim();
+                config.permissions.allowedDomains = allowedDomainsText
+                    ? allowedDomainsText.split(',').map(s => s.trim()).filter(s => s)
+                    : [];
+
+                // Parse approval level
+                const approvalLevelVal = document.getElementById('approval-level').value;
+                if (approvalLevelVal) {
+                    config.permissions.requireApprovalLevel = parseInt(approvalLevelVal);
+                } else {
+                    delete config.permissions.requireApprovalLevel;
+                }
 
                 const res = await fetch('/api/config', {
                     method: 'POST',
