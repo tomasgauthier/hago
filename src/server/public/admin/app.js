@@ -154,7 +154,17 @@ const API = {
     },
 
     async getIdentity() {
-        const res = await fetch('/identity');
+        const res = await Utils.fetchWithAuth(`${CONFIG.API_BASE}/identity`);
+        return res.json();
+    },
+
+    async getDailyCost() {
+        const res = await Utils.fetchWithAuth(`${CONFIG.API_BASE}/daily-cost`);
+        return res.json();
+    },
+
+    async getAuditLog(limit = 50) {
+        const res = await Utils.fetchWithAuth(`${CONFIG.API_BASE}/audit?limit=${limit}`);
         return res.json();
     },
 
@@ -187,6 +197,55 @@ const UI = {
 
         if (costEl) costEl.textContent = Utils.formatCost(data.totalCost);
         if (tokensEl) tokensEl.textContent = Utils.formatTokens(data.totalTokens);
+    },
+
+    renderDailyCost(data) {
+        const el = document.getElementById('daily-cost-value');
+        const barEl = document.getElementById('daily-cost-bar');
+        const detailEl = document.getElementById('daily-cost-detail');
+
+        if (el) {
+            el.textContent = `$${data.spent_usd} / $${data.ceiling_usd}`;
+            el.className = `stat__value ${data.blocked ? 'text-error' : ''}`;
+        }
+        if (barEl) {
+            const pct = Math.min(100, (parseFloat(data.spent_usd) / parseFloat(data.ceiling_usd)) * 100);
+            barEl.style.width = `${pct}%`;
+            barEl.className = `cost-bar__fill ${pct > 80 ? 'cost-bar__fill--warning' : ''} ${data.blocked ? 'cost-bar__fill--error' : ''}`;
+        }
+        if (detailEl) {
+            detailEl.textContent = data.blocked ? 'CEILING REACHED' : `$${data.remaining_usd} remaining`;
+        }
+    },
+
+    renderAuditLog(entries) {
+        const el = document.getElementById('audit-log-list');
+        if (!el) return;
+
+        if (!entries || entries.length === 0) {
+            el.innerHTML = '<div class="text-secondary" style="padding: 1rem; font-size: 0.875rem;">No audit entries yet.</div>';
+            return;
+        }
+
+        el.innerHTML = entries.map(e => {
+            const time = new Date(e.created_at).toLocaleString();
+            const actionColors = {
+                auth_failure: 'error',
+                shell_execute: 'warning',
+                config_update: 'accent',
+                config_restore: 'accent',
+                file_delete: 'error',
+                file_write: 'warning',
+                privileged_tool: 'warning',
+            };
+            const color = actionColors[e.action] || 'secondary';
+            return `<div class="audit-entry">
+                <span class="audit-entry__time">${time}</span>
+                <span class="badge badge--${color === 'accent' ? 'new' : color}">${e.action}</span>
+                <span class="audit-entry__detail">${e.detail || ''}</span>
+                ${e.ip ? `<span class="audit-entry__ip">${e.ip}</span>` : ''}
+            </div>`;
+        }).join('');
     },
 
     renderIdentity(identity) {
@@ -280,6 +339,9 @@ const UI = {
         UI.setValue('allowed-domains', (perms.allowedDomains || []).join(', '));
         UI.setValue('approval-level', String(perms.requireApprovalLevel || ''));
 
+        // Spiritual Biology
+        UI.setValue('spiritual-biology-enabled', String(config.spiritualBiology?.enabled || false));
+
         // Update permission badge
         UI.updatePermissionBadge(perms.maxLevel || 2);
     },
@@ -351,6 +413,10 @@ const ConfigManager = {
 
         config.selfModification = config.selfModification || {};
         config.selfModification.enabled = UI.getValue('selfmod-enabled') === 'true';
+
+        // Spiritual Biology
+        config.spiritualBiology = config.spiritualBiology || {};
+        config.spiritualBiology.enabled = UI.getValue('spiritual-biology-enabled') === 'true';
 
         // Permission system
         config.permissions = config.permissions || {};
@@ -500,8 +566,12 @@ const App = {
             const identity = await API.getIdentity();
             UI.renderIdentity(identity);
 
-            // Load usage stats
-            await App.updateUsage();
+            // Load usage stats & daily cost & audit
+            await Promise.all([
+                App.updateUsage(),
+                App.updateDailyCost(),
+                App.updateAuditLog(),
+            ]);
 
             // Hide auth overlay
             Auth.hideAuthOverlay();
@@ -526,6 +596,24 @@ const App = {
         }
     },
 
+    async updateDailyCost() {
+        try {
+            const cost = await API.getDailyCost();
+            UI.renderDailyCost(cost);
+        } catch (err) {
+            console.error('Daily cost fetch error:', err);
+        }
+    },
+
+    async updateAuditLog() {
+        try {
+            const entries = await API.getAuditLog(30);
+            UI.renderAuditLog(entries);
+        } catch (err) {
+            console.error('Audit log fetch error:', err);
+        }
+    },
+
     startPeriodicUpdates() {
         if (State.updateInterval) {
             clearInterval(State.updateInterval);
@@ -533,6 +621,7 @@ const App = {
 
         State.updateInterval = setInterval(() => {
             App.updateUsage();
+            App.updateDailyCost();
         }, CONFIG.UPDATE_INTERVAL);
     },
 
@@ -546,6 +635,10 @@ const App = {
         permLevel?.addEventListener('change', e => {
             UI.updatePermissionBadge(parseInt(e.target.value));
         });
+
+        // Audit log refresh
+        const refreshAuditBtn = document.getElementById('refresh-audit-btn');
+        refreshAuditBtn?.addEventListener('click', App.updateAuditLog);
 
         // Chat
         const chatToggleBtn = document.querySelector('.chat-toggle-btn');

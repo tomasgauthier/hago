@@ -755,3 +755,93 @@ textarea.form-control {
     font-size: 0.75rem;
     color: var(--secondary);
 }
+
+/* === Daily Cost Bar === */
+.cost-bar {
+    width: 100%;
+    height: 4px;
+    background: #27272a;
+    border-radius: 2px;
+    margin-top: 0.375rem;
+    overflow: hidden;
+}
+
+.cost-bar__fill {
+    height: 100%;
+    background: var(--success);
+    border-radius: 2px;
+    transition: width 0.5s ease, background 0.3s ease;
+    width: 0%;
+}
+
+.cost-bar__fill--warning {
+    background: var(--warning);
+}
+
+.cost-bar__fill--error {
+    background: var(--error);
+}
+
+.stat__detail {
+    font-size: 0.625rem;
+    color: var(--tertiary);
+    margin-top: 0.125rem;
+}
+
+/* === Audit Log === */
+.audit-log {
+    max-height: 400px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.audit-log::-webkit-scrollbar {
+    width: 6px;
+}
+
+.audit-log::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+
+.audit-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8125rem;
+}
+
+.audit-entry:last-child {
+    border-bottom: none;
+}
+
+.audit-entry:hover {
+    background: #141417;
+}
+
+.audit-entry__time {
+    font-size: 0.7rem;
+    color: var(--tertiary);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    min-width: 130px;
+}
+
+.audit-entry__detail {
+    flex: 1;
+    color: var(--secondary);
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.audit-entry__ip {
+    font-size: 0.7rem;
+    color: var(--tertiary);
+    font-family: var(--font-mono);
+}
