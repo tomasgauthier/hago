@@ -59,6 +59,12 @@
                                     <span class="stat__label">Tokens</span>
                                     <span class="stat__value" id="total-tokens">0</span>
                                 </div>
+                                <div class="stat">
+                                    <span class="stat__label">Daily Budget</span>
+                                    <span class="stat__value" id="daily-cost-value">--</span>
+                                    <div class="cost-bar"><div class="cost-bar__fill" id="daily-cost-bar"></div></div>
+                                    <span class="stat__detail" id="daily-cost-detail"></span>
+                                </div>
                             </div>
                         </div>
                         <button type="button" class="btn btn--primary" id="save-btn">Apply Changes</button>
@@ -159,6 +165,14 @@
                             <input type="text" class="form-control" id="obsidian-path"
                                 placeholder="/path/to/vault">
                         </div>
+                        <div class="form-group">
+                            <label class="form-label">Spiritual Biology (Mind System)</label>
+                            <select class="form-control" id="spiritual-biology-enabled">
+                                <option value="true">Active</option>
+                                <option value="false">Disabled</option>
+                            </select>
+                            <p class="form-hint">Dream phase, stress logging, tactical learnings with decay</p>
+                        </div>
                     </div>
                 </div>
 
@@ -227,6 +241,22 @@
                                     <option value="false">FS OFF</option>
                                 </select>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Audit Log -->
+                <div class="col-12">
+                    <div class="section-header">
+                        <h2 class="section-header__title">
+                            <span class="section-header__icon">📋</span>
+                            Audit Log
+                        </h2>
+                        <button type="button" class="btn btn--outline btn--sm" id="refresh-audit-btn">Refresh</button>
+                    </div>
+                    <div class="card">
+                        <div class="audit-log" id="audit-log-list">
+                            <div class="text-secondary" style="padding: 1rem; font-size: 0.875rem;">Loading...</div>
                         </div>
                     </div>
                 </div>

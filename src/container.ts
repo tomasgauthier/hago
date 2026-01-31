@@ -17,7 +17,9 @@ import { obsidianSearchTool, obsidianReadTool, obsidianCreateTool, obsidianSearc
 import { shellExecuteTool } from './agent/tools/builtin/shell.js';
 import { journalTool } from './agent/tools/builtin/journal.js';
 import { createFinanceTools } from './agent/tools/builtin/finance.js';
-import { logStressTool, confessUncertaintyTool, logEthicalRefusalTool, dreamTool, getLearningsTool, logGuidanceTool } from './agent/tools/builtin/spiritual-biology.js';
+import { createSpiritualBiologyTools } from './agent/tools/builtin/spiritual-biology.js';
+import { MindStore as MindStoreClass } from './mind/store.js';
+import { setMindStore } from './agent/identity.js';
 import { getCostsTool, estimateCostTool } from './agent/tools/builtin/cost-tracker.js';
 import { scheduleMessageTool, listScheduledMessagesTool, cancelScheduledMessageTool } from './agent/tools/builtin/scheduler.js';
 import { telegramCreatePollTool, telegramCreateKeyboardTool, telegramReactToMessageTool, telegramEditLastMessageTool, telegramGetMediaInfoTool } from './agent/tools/builtin/telegram.js';
@@ -52,6 +54,7 @@ export interface AppContainer {
 export function createContainer(config: AppConfig): AppContainer {
     const sessions = new SessionStore(config.dataDir);
     const mStore = new MemoryStore(sessions.db); // Using the same SQLite DB
+    const mindStore = new MindStoreClass(sessions.db); // Mind system in same DB
 
     // Permission system
     const permissions = new PermissionManager(config.permissions);
@@ -89,15 +92,12 @@ export function createContainer(config: AppConfig): AppContainer {
             logger.info('Journal and Finance tools registered successfully');
         }
 
-        // Spiritual Biology tools
+        // Spiritual Biology tools (backed by MindStore/SQLite)
         if (config.spiritualBiology?.enabled) {
-            tools.register(logStressTool);
-            tools.register(confessUncertaintyTool);
-            tools.register(logEthicalRefusalTool);
-            tools.register(dreamTool);
-            tools.register(getLearningsTool);
-            tools.register(logGuidanceTool);
-            logger.info('Spiritual Biology tools registered (6 tools)');
+            const spiritTools = createSpiritualBiologyTools(mindStore);
+            spiritTools.forEach(tool => tools.register(tool));
+            setMindStore(mindStore);
+            logger.info('Spiritual Biology tools registered (6 tools, SQLite-backed)');
         }
     }
 
@@ -132,6 +132,7 @@ export function createContainer(config: AppConfig): AppContainer {
         providers,
         defaultProviderId: config.defaultProvider,
         memory: config.memory.enabled ? memory : null,
+        mindStore: config.spiritualBiology?.enabled ? mindStore : null,
     });
 
     // Multi-agent router

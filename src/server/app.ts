@@ -5,6 +5,7 @@ import { streamText } from 'hono/streaming';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { AppContainer } from '../container.js';
 import { saveConfig } from '../config/load.js';
+import { AppConfigSchema } from '../config/schema.js';
 import { IDENTITY } from '../agent/identity.js';
 import { logger } from '../utils/logger.js';
 import { verifyAuthorization, generateToken } from '../utils/auth.js';
@@ -152,7 +153,9 @@ export function createServer(container: AppContainer) {
 
     // Public routes (no auth needed)
     app.get('/health', (c) => c.json({ status: 'ok', version: '2.0.0' }));
-    app.get('/identity', (c) => c.json(IDENTITY));
+
+    // Identity is behind /api/ auth — exposes persona and principles
+    app.get('/api/identity', (c) => c.json(IDENTITY));
 
     app.get('/api/usage', (c) => {
         return c.json(container.sessions.getTotalCosts());
@@ -188,20 +191,25 @@ export function createServer(container: AppContainer) {
 
         // Merge with existing secrets to avoid overwriting with '********'
         const currentConfig = container.config;
-        newConfig.providers.forEach((p: any, i: number) => {
-            const current = currentConfig.providers[i];
-            if (current) {
-                if (p.apiKey === '********') p.apiKey = current.apiKey;
-                if (p.googleApiKey === '********') p.googleApiKey = current.googleApiKey;
-            }
-        });
-        if (newConfig.channels.telegram?.token === '********') {
+        if (Array.isArray(newConfig.providers)) {
+            newConfig.providers.forEach((p: any, i: number) => {
+                const current = currentConfig.providers[i];
+                if (current) {
+                    if (p.apiKey === '********') p.apiKey = current.apiKey;
+                    if (p.googleApiKey === '********') p.googleApiKey = current.googleApiKey;
+                }
+            });
+        }
+        if (newConfig.channels?.telegram?.token === '********') {
             newConfig.channels.telegram.token = currentConfig.channels.telegram?.token;
         }
 
         try {
-            saveConfig(newConfig);
-            Object.assign(container.config, newConfig);
+            // Validate against Zod schema BEFORE applying — reject malformed configs
+            const validated = AppConfigSchema.parse(newConfig);
+
+            saveConfig(validated);
+            Object.assign(container.config, validated);
 
             audit.log({
                 action: 'config_update',
@@ -210,13 +218,13 @@ export function createServer(container: AppContainer) {
             });
 
             // Hot-reload channel configurations
-            if (newConfig.channels.telegram) {
-                container.channels.updateChannelConfig('telegram', newConfig.channels.telegram);
+            if (validated.channels.telegram) {
+                container.channels.updateChannelConfig('telegram', validated.channels.telegram);
             }
 
             return c.json({ success: true });
         } catch (err: any) {
-            return c.json({ error: err.message }, 500);
+            return c.json({ error: `Config validation failed: ${err.message}` }, 400);
         }
     });
 

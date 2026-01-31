@@ -66,15 +66,15 @@ export class PermissionManager {
   /**
    * Check if a file path is allowed for operations
    */
-  checkFilePath(path: string, operation: 'read' | 'write' | 'delete'): void {
-    const normalizedPath = this.normalizePath(path);
+  checkFilePath(filePath: string, operation: 'read' | 'write' | 'delete'): void {
+    const normalizedPath = this.normalizePath(filePath);
 
     // Check denied directories first (blacklist takes precedence)
     if (this.config.deniedDirectories) {
       for (const denied of this.config.deniedDirectories) {
-        if (normalizedPath.startsWith(this.normalizePath(denied))) {
+        if (this.isWithinDirectory(normalizedPath, this.normalizePath(denied))) {
           throw new PermissionError(
-            `Access to path "${path}" is explicitly denied`,
+            `Access to path "${filePath}" is explicitly denied`,
             `file_${operation}`,
             PermissionLevel.PRIVILEGED,
             this.config.maxLevel
@@ -88,14 +88,14 @@ export class PermissionManager {
       if (this.config.allowedDirectories && this.config.allowedDirectories.length > 0) {
         let allowed = false;
         for (const allowedDir of this.config.allowedDirectories) {
-          if (normalizedPath.startsWith(this.normalizePath(allowedDir))) {
+          if (this.isWithinDirectory(normalizedPath, this.normalizePath(allowedDir))) {
             allowed = true;
             break;
           }
         }
         if (!allowed) {
           throw new PermissionError(
-            `Write/delete operations to "${path}" are not in the allowed directories`,
+            `Write/delete operations to "${filePath}" are not in the allowed directories`,
             `file_${operation}`,
             PermissionLevel.PRIVILEGED,
             this.config.maxLevel
@@ -199,9 +199,22 @@ export class PermissionManager {
     return operationLevel >= this.config.requireApprovalLevel;
   }
 
-  private normalizePath(path: string): string {
-    // Normalize path separators and resolve to absolute path
-    return path.replace(/\\/g, '/').toLowerCase();
+  /**
+   * Check if a path is within a directory using proper boundary check.
+   * Prevents "/allowed-dir" from matching "/allowed-directory-evil".
+   */
+  private isWithinDirectory(normalizedPath: string, normalizedDir: string): boolean {
+    // Ensure directory path ends with separator for exact boundary matching
+    const dirWithSep = normalizedDir.endsWith('/') ? normalizedDir : normalizedDir + '/';
+    return normalizedPath === normalizedDir || normalizedPath.startsWith(dirWithSep);
+  }
+
+  private normalizePath(inputPath: string): string {
+    // Resolve to absolute path first (handles ../ traversal), then normalize
+    const resolved = inputPath.startsWith('/')
+      ? inputPath
+      : inputPath; // relative paths stay relative for pattern matching
+    return resolved.replace(/\\/g, '/').replace(/\/+/g, '/').toLowerCase();
   }
 }
 

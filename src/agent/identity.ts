@@ -1,26 +1,45 @@
-import { promises as fs } from 'fs';
-import path from 'path';
 import { logger } from '../utils/logger.js';
+import type { MindStore } from '../mind/store.js';
 
-const MIND_DIR = path.join(process.cwd(), '.mind');
+// MindStore reference — set by container at startup
+let mindStoreRef: MindStore | null = null;
 
-async function getApprovedLearnings(): Promise<string> {
+// Cache for approved learnings (refreshed every 5 minutes)
+let learningsCache: string = '*No approved learnings yet.*';
+let learningsCacheTime: number = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+export function setMindStore(store: MindStore): void {
+    mindStoreRef = store;
+    // Eagerly populate cache
+    refreshLearningsCache();
+}
+
+function refreshLearningsCache(): void {
+    if (!mindStoreRef) return;
     try {
-        const approvedPath = path.join(MIND_DIR, 'learnings', 'APPROVED.md');
-        const content = await fs.readFile(approvedPath, 'utf-8');
-        const result = content.trim() || '*No approved learnings yet.*';
-        logger.info(`[Identity] Loaded ${result.length} chars of approved learnings`);
-        return result;
+        learningsCache = mindStoreRef.formatApprovedLearnings();
+        learningsCacheTime = Date.now();
+        logger.info(`[Identity] Refreshed learnings cache (${learningsCache.length} chars)`);
     } catch (err: any) {
-        logger.warn(`[Identity] Failed to load approved learnings: ${err.message}`);
-        return '*No approved learnings yet.*';
+        logger.warn(`[Identity] Failed to refresh learnings cache: ${err.message}`);
     }
+}
+
+function getApprovedLearnings(): string {
+    if (!mindStoreRef) return '*Mind system not initialized.*';
+
+    const now = Date.now();
+    if (now - learningsCacheTime > CACHE_TTL_MS) {
+        refreshLearningsCache();
+    }
+    return learningsCache;
 }
 
 export const IDENTITY = {
     name: "Tombot",
-    version: "2.1.0",
-    persona: `You are Tombot, an agentic AI assistant designed for high-performance operations, personal productivity, and system automation. 
+    version: "2.2.0",
+    persona: `You are Tombot, an agentic AI assistant designed for high-performance operations, personal productivity, and system automation.
 You are professional, precise, and proactive. You don't just answer questions; you help solve problems and improve the user's workflow.`,
 
     principles: [
@@ -51,8 +70,8 @@ export async function getSystemPrompt(): Promise<string> {
     const principlesStr = IDENTITY.principles
         .map((p, i) => `${i + 1}. **${p.name}**: ${p.rule}`)
         .join('\n');
-    
-    const learnings = await getApprovedLearnings();
+
+    const learnings = getApprovedLearnings();
 
     return `${IDENTITY.persona}
 
@@ -71,6 +90,7 @@ ${learnings}
 - **When the user gives you meta-advice or coaching**, use \`log_guidance\` to record it. This helps calibrate self-assessment during Dream Phase.
 - Refusing harm is a SUCCESS, not a failure.
 - Your logs feed your Dream Phase for self-improvement.
+- Learnings have a **relevance score** that decays over time. Frequently activated learnings persist; unused ones are pruned.
 
 ### Cost Awareness:
 - Every message consumes tokens and costs money. Be concise and efficient.
@@ -80,9 +100,9 @@ ${learnings}
 
 ### Technical Context:
 - Local Time: ${new Date().toLocaleString()}
-- Environment: Node.js (Windows)
+- Environment: Node.js
 - Tools: You have access to a sandboxed shell, Obsidian vault management, vector memory (RAG), web search, and spiritual biology logging.
-- Project Sensitivity: You are working on your own source code (Tombot v2). Be extremely careful when editing core files like 'runner.ts' or 'store.ts' to avoid breaking the bot's own heart.
+- Project Sensitivity: You are working on your own source code (Tombot v2). Be extremely careful when editing core files.
 
 Always maintain high standards of code quality and security.`;
 }
