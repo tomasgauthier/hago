@@ -1,0 +1,154 @@
+/**
+ * Tombot Configuration Example
+ *
+ * This file shows all available configuration options including the new
+ * browser automation, file system, and self-modification features.
+ *
+ * Copy this to config.json5 and customize for your needs.
+ */
+{
+    // Data directory for databases and logs
+    dataDir: './data',
+
+    // Logging level
+    logLevel: 'info', // debug, info, warn, error
+
+    // LLM Providers
+    providers: [
+        {
+            id: 'gemini-default',
+            type: 'gemini',
+            model: 'gemini-2.0-flash-exp',
+            // API key from GOOGLE_API_KEY env var
+        },
+        {
+            id: 'claude',
+            type: 'claude',
+            model: 'claude-3-5-sonnet-20241022',
+            // API key from ANTHROPIC_API_KEY env var
+        },
+        {
+            id: 'gpt4',
+            type: 'openai',
+            model: 'gpt-4-turbo-preview',
+            // API key from OPENAI_API_KEY env var
+        },
+    ],
+
+    // Default provider to use
+    defaultProvider: 'gemini-default',
+
+    // Tool configuration
+    tools: {
+        enabled: true,
+        // Optional: allowList or denyList specific tools
+        // allowList: ['browser_navigate', 'fs_read_file'],
+        // denyList: ['fs_delete_directory'],
+    },
+
+    // Permission system (IMPORTANT FOR SAFETY!)
+    permissions: {
+        /**
+         * Maximum permission level (1-4):
+         * 1 = READ_ONLY - Only read files, web fetch, list directories
+         * 2 = WRITE_SAFE - Write to whitelisted directories
+         * 3 = EXECUTE_SAFE - Browser automation, safe commands
+         * 4 = PRIVILEGED - Full system access, self-modification
+         */
+        maxLevel: 2, // Start with WRITE_SAFE for safety
+
+        // Directories allowed for write/delete operations
+        allowedDirectories: [
+            './data',
+            './tmp',
+            './.mind',
+            './logs',
+        ],
+
+        // Directories that are NEVER allowed (even with PRIVILEGED)
+        deniedDirectories: [
+            './node_modules',
+            './.git',
+            './src', // Prevent accidental code modification
+        ],
+
+        // Commands allowed for execution (leave empty to allow all)
+        allowedCommands: [],
+
+        // Commands that are ALWAYS forbidden
+        deniedCommands: [
+            'rm -rf /',
+            'format',
+            'del /f /s /q c:\\',
+            'shutdown',
+            'reboot',
+        ],
+
+        // Domains allowed for browser automation (empty = allow all)
+        allowedDomains: [
+            // Examples:
+            // 'example.com',
+            // '*.github.com',
+        ],
+
+        // Require user approval for operations at this level or higher
+        // Set to 3 to require approval for EXECUTE_SAFE and PRIVILEGED operations
+        requireApprovalLevel: 4, // Only require approval for PRIVILEGED
+    },
+
+    // Semantic memory / RAG
+    memory: {
+        enabled: false,
+        provider: 'gemini-default', // Which provider to use for embeddings
+    },
+
+    // Multi-agent routing
+    routing: {
+        enabled: false,
+        routes: [
+            // Route messages matching patterns to specific providers
+            // { provider: 'claude', patterns: ['code', 'programming'] },
+        ],
+    },
+
+    // Communication channels
+    channels: {
+        telegram: {
+            enabled: false,
+            // token from TELEGRAM_TOKEN env var
+            authorizedUsers: [], // Add your Telegram user ID here
+        },
+        whatsapp: {
+            enabled: false,
+            phoneNumber: '', // Optional: your phone number
+        },
+    },
+
+    // Obsidian integration
+    obsidian: {
+        enabled: false,
+        vaultPath: '', // Path to your Obsidian vault
+    },
+
+    // Spiritual Biology Protocol
+    spiritualBiology: {
+        enabled: false,
+    },
+
+    // ===== NEW FEATURES =====
+
+    // Browser automation (Level 3 permission required)
+    browser: {
+        enabled: false, // Set to true to enable browser automation
+    },
+
+    // File system tools (Level 2+ permission required)
+    filesystem: {
+        enabled: false, // Set to true to enable file system operations
+    },
+
+    // Self-modification (Level 4 permission required - USE WITH EXTREME CAUTION)
+    selfModification: {
+        enabled: false, // Set to true to allow agent to modify its own config
+    },
+}

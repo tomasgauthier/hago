@@ -15,7 +15,10 @@
       "Bash(else echo \"File does not exist\")",
       "Bash(fi)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(npm install:*)",
+      "Bash(npx playwright install:*)"
     ]
   }
 }

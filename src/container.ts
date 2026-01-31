@@ -27,6 +27,11 @@ import { MemoryIndex } from './memory/index.js';
 import { CronScheduler } from './cron/scheduler.js';
 import { logger } from './utils/logger.js';
 import { serve } from '@hono/node-server';
+import { PermissionManager } from './utils/permissions.js';
+import { ApprovalQueue } from './utils/approval-queue.js';
+import { BrowserManager, createBrowserTools } from './agent/tools/builtin/browser.js';
+import { createFileSystemTools } from './agent/tools/builtin/filesystem.js';
+import { createSelfModTools } from './agent/tools/builtin/selfmod.js';
 
 export interface AppContainer {
     sessions: SessionStore;
@@ -36,6 +41,9 @@ export interface AppContainer {
     tools: ToolRegistry;
     memory: MemoryIndex;
     cron: CronScheduler;
+    permissions: PermissionManager;
+    approvalQueue: ApprovalQueue;
+    browserManager: BrowserManager;
     start: () => Promise<void>;
     stop: () => Promise<void>;
 }
@@ -43,6 +51,16 @@ export interface AppContainer {
 export function createContainer(config: AppConfig): AppContainer {
     const sessions = new SessionStore(config.dataDir);
     const mStore = new MemoryStore(sessions.db); // Using the same SQLite DB
+
+    // Permission system
+    const permissions = new PermissionManager(config.permissions);
+    logger.info({ maxLevel: config.permissions.maxLevel }, 'Permission system initialized');
+
+    // Approval queue for privileged operations
+    const approvalQueue = new ApprovalQueue(logger);
+
+    // Browser automation manager
+    const browserManager = new BrowserManager(logger, permissions);
 
     // Tools
     const tools = new ToolRegistry();
@@ -153,6 +171,27 @@ export function createContainer(config: AppConfig): AppContainer {
     tools.register(cancelScheduledMessageTool);
     logger.info('Scheduler tools registered (3 tools)');
 
+    // Browser automation tools
+    if (config.browser.enabled) {
+        const browserTools = createBrowserTools(logger, permissions, browserManager);
+        browserTools.forEach(tool => tools.register(tool));
+        logger.info('Browser automation tools registered (8 tools)');
+    }
+
+    // File system tools
+    if (config.filesystem.enabled) {
+        const fsTools = createFileSystemTools(logger, permissions);
+        fsTools.forEach(tool => tools.register(tool));
+        logger.info('File system tools registered (10 tools)');
+    }
+
+    // Self-modification tools
+    if (config.selfModification.enabled) {
+        const selfModTools = createSelfModTools(logger, permissions);
+        selfModTools.forEach(tool => tools.register(tool));
+        logger.info('Self-modification tools registered (7 tools)');
+    }
+
     // Register Telegram-specific tools
     tools.register(telegramCreatePollTool);
     tools.register(telegramCreateKeyboardTool);
@@ -186,6 +225,7 @@ export function createContainer(config: AppConfig): AppContainer {
     const stop = async () => {
         logger.info('Tombot stopping...');
         await channels.stop();
+        await browserManager.closeAll();
         cron.close();
         if (serverHandle) serverHandle.close();
         sessions.close();
@@ -199,6 +239,9 @@ export function createContainer(config: AppConfig): AppContainer {
         tools,
         memory,
         cron,
+        permissions,
+        approvalQueue,
+        browserManager,
         start,
         stop,
     };
