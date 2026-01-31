@@ -2,88 +2,15 @@
  * Browser automation tools using Playwright
  */
 
-import { chromium, type Browser, type Page, type BrowserContext } from 'playwright';
 import { z } from 'zod';
 import type { ToolDefinition, ToolExecutionContext } from '../registry.js';
 import type { PermissionManager } from '../../../utils/permissions.js';
 import { PermissionLevel } from '../../../utils/permissions.js';
 import type { Logger } from 'pino';
+import { BrowserManager } from './browser-manager.js';
 
-/**
- * Browser automation manager with session management
- */
-export class BrowserManager {
-  private browser: Browser | null = null;
-  private contexts = new Map<string, BrowserContext>();
-  private pages = new Map<string, Page>();
-  private logger: Logger;
-  private permissions: PermissionManager;
-
-  constructor(logger: Logger, permissions: PermissionManager) {
-    this.logger = logger;
-    this.permissions = permissions;
-  }
-
-  async ensureBrowser(): Promise<Browser> {
-    if (!this.browser) {
-      this.logger.info('Launching Chromium browser');
-      this.browser = await chromium.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
-    }
-    return this.browser;
-  }
-
-  async getOrCreatePage(sessionKey: string): Promise<Page> {
-    if (this.pages.has(sessionKey)) {
-      return this.pages.get(sessionKey)!;
-    }
-
-    const browser = await this.ensureBrowser();
-    const context = await browser.newContext({
-      viewport: { width: 1920, height: 1080 },
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    });
-
-    const page = await context.newPage();
-
-    this.contexts.set(sessionKey, context);
-    this.pages.set(sessionKey, page);
-
-    this.logger.info({ sessionKey }, 'Created new browser page for session');
-    return page;
-  }
-
-  async closePage(sessionKey: string): Promise<void> {
-    const page = this.pages.get(sessionKey);
-    const context = this.contexts.get(sessionKey);
-
-    if (page) {
-      await page.close();
-      this.pages.delete(sessionKey);
-    }
-
-    if (context) {
-      await context.close();
-      this.contexts.delete(sessionKey);
-    }
-
-    this.logger.info({ sessionKey }, 'Closed browser page for session');
-  }
-
-  async closeAll(): Promise<void> {
-    for (const [sessionKey] of this.pages) {
-      await this.closePage(sessionKey);
-    }
-
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      this.logger.info('Closed browser');
-    }
-  }
-}
+// Re-export BrowserManager for backwards compatibility
+export { BrowserManager } from './browser-manager.js';
 
 /**
  * Create browser automation tools
@@ -109,7 +36,6 @@ export function createBrowserTools(
       execute: async (params: any, context?: ToolExecutionContext) => {
         const { url, waitUntil } = params;
 
-        // Check permissions
         permissions.checkPermission('browser_navigate', PermissionLevel.EXECUTE_SAFE);
         permissions.checkDomain(url);
 
@@ -159,7 +85,6 @@ export function createBrowserTools(
             content = await page.textContent('body') || '';
           }
 
-          // Truncate if too long
           const maxLength = 10000;
           if (content.length > maxLength) {
             content = content.substring(0, maxLength) + '\n... (truncated)';
@@ -270,7 +195,6 @@ export function createBrowserTools(
           const filename = `screenshot_${timestamp}.png`;
           const path = `./data/screenshots/${filename}`;
 
-          // Ensure screenshots directory exists
           const fs = await import('fs/promises');
           await fs.mkdir('./data/screenshots', { recursive: true });
 

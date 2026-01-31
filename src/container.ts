@@ -32,6 +32,7 @@ import { ApprovalQueue } from './utils/approval-queue.js';
 import { BrowserManager, createBrowserTools } from './agent/tools/builtin/browser.js';
 import { createFileSystemTools } from './agent/tools/builtin/filesystem.js';
 import { createSelfModTools } from './agent/tools/builtin/selfmod.js';
+import { createMemoryTools } from './agent/tools/builtin/memory.js';
 
 export interface AppContainer {
     sessions: SessionStore;
@@ -130,6 +131,7 @@ export function createContainer(config: AppConfig): AppContainer {
         sessions,
         providers,
         defaultProviderId: config.defaultProvider,
+        memory: config.memory.enabled ? memory : null,
     });
 
     // Multi-agent router
@@ -190,6 +192,13 @@ export function createContainer(config: AppConfig): AppContainer {
         const selfModTools = createSelfModTools(logger, permissions);
         selfModTools.forEach(tool => tools.register(tool));
         logger.info('Self-modification tools registered (7 tools)');
+    }
+
+    // Memory/RAG tools
+    if (config.memory.enabled && embeddingProvider) {
+        const memoryTools = createMemoryTools(logger, memory);
+        memoryTools.forEach(tool => tools.register(tool));
+        logger.info('Memory tools registered (2 tools: memory_store, memory_query)');
     }
 
     // Register Telegram-specific tools
