@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(node:*)",
+      "WebFetch(domain:linkedin.com)",
+      "WebFetch(domain:gauthier.cl)",
+      "WebFetch(domain:substack.gauthier.cl)",
+      "Bash(wc:*)",
+      "Bash(powershell -NoProfile -Command \"Remove-Item -Recurse -Force ''c:\\\\Users\\\\tomas\\\\Desarrollos\\\\tombot\\\\data\\\\whatsapp-auth\\\\*''\")",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(if [ -f .gitignore ])",
+      "Bash(then cat .gitignore)",
+      "Bash(else echo \"File does not exist\")",
+      "Bash(fi)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
