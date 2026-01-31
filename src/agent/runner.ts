@@ -1,10 +1,12 @@
 import { SessionStore } from '../sessions/store.js';
 import { LLMProvider, LLMMessage } from './providers/types.js';
 import { MemoryIndex } from '../memory/index.js';
+import type { MindStore } from '../mind/store.js';
 import { logger } from '../utils/logger.js';
 import { getSystemPrompt } from './identity.js';
 
-// Stress detection patterns
+// Stress detection patterns — kept as lightweight first-pass filter.
+// A future improvement could use embeddings for semantic stress detection.
 const STRESS_PATTERNS = [
     /no[,\s]+(that'?s?\s+)?(wrong|incorrect|not what i meant)/i,
     /actually[,\s]+/i,
@@ -35,17 +37,20 @@ export class AgentRunner {
     private providers: Map<string, LLMProvider>;
     private defaultProviderId: string;
     private memory: MemoryIndex | null;
+    private mindStore: MindStore | null;
 
     constructor(config: {
         sessions: SessionStore;
         providers: LLMProvider[];
         defaultProviderId: string;
         memory?: MemoryIndex | null;
+        mindStore?: MindStore | null;
     }) {
         this.sessions = config.sessions;
         this.providers = new Map(config.providers.map(p => [p.id, p]));
         this.defaultProviderId = config.defaultProviderId;
         this.memory = config.memory || null;
+        this.mindStore = config.mindStore || null;
     }
 
     async *run(input: AgentInput): AsyncGenerator<AgentEvent> {
@@ -61,19 +66,16 @@ export class AgentRunner {
         this.sessions.addMessage(session.id, 'user', input.text);
 
         // Auto-detect stress patterns in user message
-        if (detectStress(input.text)) {
-            const toolRegistry = (global as any).container?.tools;
-            if (toolRegistry) {
-                try {
-                    await toolRegistry.execute('log_stress', {
-                        signal_type: 'correction',
-                        context: `Auto-detected from user message: "${input.text.substring(0, 100)}${input.text.length > 100 ? '...' : ''}"`,
-                        intensity: 3,
-                    });
-                    logger.info('[Mind] Auto-detected stress pattern');
-                } catch (err: any) {
-                    logger.warn(`[Mind] Failed to auto-log stress: ${err?.message || err}`);
-                }
+        if (detectStress(input.text) && this.mindStore) {
+            try {
+                this.mindStore.addLog('stress', {
+                    signal_type: 'correction',
+                    context: `Auto-detected from user message: "${input.text.substring(0, 100)}${input.text.length > 100 ? '...' : ''}"`,
+                    intensity: 3,
+                });
+                logger.info('[Mind] Auto-detected stress pattern');
+            } catch (err: any) {
+                logger.warn(`[Mind] Failed to auto-log stress: ${err?.message || err}`);
             }
         }
 
