@@ -7,6 +7,8 @@ import { AppContainer } from '../container.js';
 import { saveConfig } from '../config/load.js';
 import { IDENTITY } from '../agent/identity.js';
 import { logger } from '../utils/logger.js';
+import { verifyAuthorization, generateToken } from '../utils/auth.js';
+import { AuditLog } from '../utils/audit.js';
 
 // ── Rate Limiter (in-memory, per-IP) ────────────────────────────────
 interface RateBucket {
@@ -49,15 +51,36 @@ function getDailyCost(container: AppContainer): number {
     return row.dailyCost;
 }
 
+function getClientIp(c: any): string {
+    return c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+        || c.req.header('x-real-ip')
+        || '127.0.0.1';
+}
+
 export function createServer(container: AppContainer) {
     const app = new Hono();
+    const audit = new AuditLog(container.sessions.db);
 
     app.use('*', honoLogger());
     app.use('*', cors());
 
+    // ── Security headers ─────────────────────────────────────────────
+    app.use('*', async (c, next) => {
+        await next();
+        c.header('X-Content-Type-Options', 'nosniff');
+        c.header('X-Frame-Options', 'DENY');
+        c.header('X-XSS-Protection', '1; mode=block');
+        c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+        c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+        // Only set strict CSP on API responses, not on admin static files
+        if (c.req.path.startsWith('/api/')) {
+            c.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+        }
+    });
+
     // Rate limiting middleware for all routes
     app.use('*', async (c, next) => {
-        const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || '127.0.0.1';
+        const ip = getClientIp(c);
         if (isRateLimited(ip)) {
             return c.json({ error: 'Too many requests. Try again later.' }, 429);
         }
@@ -70,15 +93,53 @@ export function createServer(container: AppContainer) {
         logger.warn('ADMIN_PASSWORD is not set — all API and admin routes will return 403. Set it in .env.');
     }
 
-    // Auth middleware for /api/* routes (data access requires auth)
+    // Auth middleware for /api/* routes — uses HMAC token validation with raw password fallback
     app.use('/api/*', async (c, next) => {
         if (!adminPassword) {
             return c.json({ error: 'Server misconfigured: ADMIN_PASSWORD not set' }, 403);
         }
-        if (c.req.header('Authorization') !== `Bearer ${adminPassword}`) {
+
+        const authHeader = c.req.header('Authorization');
+        if (!verifyAuthorization(authHeader, adminPassword)) {
+            const ip = getClientIp(c);
+            audit.log({
+                action: 'auth_failure',
+                detail: `Failed auth attempt on ${c.req.method} ${c.req.path}`,
+                ip,
+            });
             return c.json({ error: 'Unauthorized' }, 401);
         }
+
         await next();
+    });
+
+    // ── Token endpoint — exchange admin password for time-limited HMAC token ──
+    app.post('/auth/token', async (c) => {
+        if (!adminPassword) {
+            return c.json({ error: 'Server misconfigured: ADMIN_PASSWORD not set' }, 403);
+        }
+
+        const body = await c.req.json().catch(() => ({}));
+        const { password } = body as { password?: string };
+
+        if (!password || password !== adminPassword) {
+            const ip = getClientIp(c);
+            audit.log({
+                action: 'auth_failure',
+                detail: 'Failed token exchange attempt',
+                ip,
+            });
+            return c.json({ error: 'Invalid password' }, 401);
+        }
+
+        const ttl = 24 * 60 * 60 * 1000; // 24h
+        const token = generateToken(adminPassword, ttl);
+
+        return c.json({
+            token,
+            expires_in: ttl / 1000,
+            token_type: 'Bearer',
+        });
     });
 
     // Admin static files are served without auth — the UI itself is just HTML/JS/CSS.
@@ -95,6 +156,17 @@ export function createServer(container: AppContainer) {
 
     app.get('/api/usage', (c) => {
         return c.json(container.sessions.getTotalCosts());
+    });
+
+    // Audit log endpoint
+    app.get('/api/audit', (c) => {
+        const action = c.req.query('action');
+        const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 200);
+
+        if (action) {
+            return c.json(audit.getByAction(action as any, limit));
+        }
+        return c.json(audit.getRecent(limit));
     });
 
     // Config Management
@@ -130,6 +202,12 @@ export function createServer(container: AppContainer) {
         try {
             saveConfig(newConfig);
             Object.assign(container.config, newConfig);
+
+            audit.log({
+                action: 'config_update',
+                detail: 'Configuration updated via API',
+                ip: getClientIp(c),
+            });
 
             // Hot-reload channel configurations
             if (newConfig.channels.telegram) {
@@ -200,6 +278,9 @@ export function createServer(container: AppContainer) {
     app.get('/api/sessions', (c) => {
         return c.json({ sessions: [] });
     });
+
+    // Expose audit log instance for other modules
+    (container as any).audit = audit;
 
     return app;
 }

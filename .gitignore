@@ -45,6 +45,9 @@ temp/
 
 # Config (may contain sensitive data - keep config.example.json5 instead)
 config.json5
+config.json5.bak
+config.json5.backup.*
+config.json5.before-restore.*
 
 # Plugins directory (user-installed plugins)
 plugins/

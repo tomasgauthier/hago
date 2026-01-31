@@ -172,6 +172,15 @@ export const shellExecuteTool = {
         const { shell, args: shellArgs } = getShellConfig();
         logger.info(`Executing shell command: ${command} in ${effectiveCwd}`);
 
+        // Audit log the shell execution
+        const audit = (global as any).container?.audit;
+        if (audit) {
+            audit.log({
+                action: 'shell_execute',
+                detail: `Command: ${command} | CWD: ${effectiveCwd}`,
+            });
+        }
+
         return new Promise((resolve, reject) => {
             // Strip sensitive env vars from the child process environment
             const safeEnv = { ...process.env };

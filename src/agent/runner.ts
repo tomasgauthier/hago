@@ -1,5 +1,6 @@
 import { SessionStore } from '../sessions/store.js';
 import { LLMProvider, LLMMessage } from './providers/types.js';
+import { MemoryIndex } from '../memory/index.js';
 import { logger } from '../utils/logger.js';
 import { getSystemPrompt } from './identity.js';
 
@@ -33,15 +34,18 @@ export class AgentRunner {
     private sessions: SessionStore;
     private providers: Map<string, LLMProvider>;
     private defaultProviderId: string;
+    private memory: MemoryIndex | null;
 
     constructor(config: {
         sessions: SessionStore;
         providers: LLMProvider[];
         defaultProviderId: string;
+        memory?: MemoryIndex | null;
     }) {
         this.sessions = config.sessions;
         this.providers = new Map(config.providers.map(p => [p.id, p]));
         this.defaultProviderId = config.defaultProviderId;
+        this.memory = config.memory || null;
     }
 
     async *run(input: AgentInput): AsyncGenerator<AgentEvent> {
@@ -85,6 +89,25 @@ export class AgentRunner {
             toolCalls: m.metadata?.toolCalls
         }));
         messages.push({ role: 'user', content: input.text });
+
+        // RAG: augment context with relevant memories
+        if (this.memory) {
+            try {
+                const memories = await this.memory.query(input.text, 3);
+                if (memories.length > 0) {
+                    const memoryContext = memories
+                        .map((m: any) => m.content)
+                        .join('\n---\n');
+                    messages.push({
+                        role: 'user',
+                        content: `[Relevant memories retrieved automatically — use if helpful]\n${memoryContext}`,
+                    });
+                    logger.info({ count: memories.length }, 'Injected RAG context into conversation');
+                }
+            } catch (err: any) {
+                logger.warn(`RAG context retrieval failed: ${err.message}`);
+            }
+        }
 
         let fullResponse = '';
         let iteration = 0;
