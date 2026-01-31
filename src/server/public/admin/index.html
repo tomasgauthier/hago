@@ -37,9 +37,8 @@
 
         <!-- Main Dashboard Grid -->
         <main class="dashboard-grid">
-            <!-- Left Column: Primary Configs -->
-            <div class="col-9 dashboard-grid">
-
+            <!-- Left Column: Primary Configs & Active Channels -->
+            <div class="col-8 dashboard-grid">
                 <!-- Status & Actions Bar -->
                 <div class="col-12">
                     <div class="card card--status">
@@ -82,6 +81,35 @@
                     </div>
                 </div>
 
+                <!-- Communication Channels (Moved from sidebar) -->
+                <div class="col-12">
+                    <div class="section-header">
+                        <h2 class="section-header__title">
+                            <span class="section-header__icon">📡</span>
+                            Primary Channels
+                        </h2>
+                    </div>
+                    <div class="card">
+                        <div class="dashboard-grid">
+                            <div class="col-6">
+                                <div class="form-group">
+                                    <label class="form-label">Telegram Token</label>
+                                    <input type="password" class="form-control" id="telegram-token"
+                                        placeholder="bot_token_secret">
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="form-group">
+                                    <label class="form-label">Authorized User IDs</label>
+                                    <textarea class="form-control" id="authorized-users" rows="2"
+                                        placeholder="123456789, 987654321"></textarea>
+                                    <p class="form-hint">Comma-separated IDs</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- System Identity -->
                 <div class="col-12">
                     <div class="section-header">
@@ -93,44 +121,22 @@
                     </div>
                     <div class="card">
                         <pre class="font-mono text-secondary" style="white-space: pre-wrap; line-height: 1.7; font-size: 0.875rem;" id="bot-persona"></pre>
-                        <div class="principle-grid" id="bot-principles" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem;">
+                        <hr style="border: 0; border-top: 1px solid var(--border); margin: 2rem 0;">
+                        <div class="principle-grid" id="bot-principles" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
                             <!-- Principles will load here -->
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Column: Channels & Features -->
-            <div class="col-3 dashboard-grid">
-                <!-- Communication Channels -->
-                <div class="col-12">
-                    <div class="section-header">
-                        <h2 class="section-header__title">
-                            <span class="section-header__icon">📡</span>
-                            Channels
-                        </h2>
-                    </div>
-                    <div class="card">
-                        <div class="form-group">
-                            <label class="form-label">Telegram Token</label>
-                            <input type="password" class="form-control" id="telegram-token"
-                                placeholder="bot_token_secret">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Authorized User IDs</label>
-                            <textarea class="form-control" id="authorized-users" rows="3"
-                                placeholder="123456789, 987654321"></textarea>
-                            <p class="form-hint">Comma-separated Telegram user IDs</p>
-                        </div>
-                    </div>
-                </div>
-
+            <!-- Right Column: System Capabilities & Permissions -->
+            <div class="col-4 dashboard-grid">
                 <!-- Core Capabilities -->
                 <div class="col-12">
                     <div class="section-header">
                         <h2 class="section-header__title">
                             <span class="section-header__icon">⚙️</span>
-                            Core Capabilities
+                            Capabilities
                         </h2>
                     </div>
                     <div class="card">
@@ -140,7 +146,6 @@
                                 <option value="true">Active</option>
                                 <option value="false">Disabled</option>
                             </select>
-                            <p class="form-hint">Semantic memory for long-term knowledge</p>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Tool Execution</label>
@@ -157,90 +162,71 @@
                     </div>
                 </div>
 
+                <!-- Permission System -->
+                <div class="col-12">
+                    <div class="section-header">
+                        <h2 class="section-header__title">
+                            <span class="section-header__icon">🔒</span>
+                            Security
+                        </h2>
+                        <span class="badge badge--success" id="permission-badge">Level 2</span>
+                    </div>
+                    <div class="card">
+                        <div class="form-group">
+                            <label class="form-label">Max Level</label>
+                            <select class="form-control" id="permission-level">
+                                <option value="1">Level 1 - READ</option>
+                                <option value="2">Level 2 - WRITE</option>
+                                <option value="3">Level 3 - EXEC</option>
+                                <option value="4">Level 4 - PRIV</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Approval Requirement</label>
+                            <select class="form-control" id="approval-level">
+                                <option value="">None</option>
+                                <option value="2">Level 2+</option>
+                                <option value="3">Level 3+</option>
+                                <option value="4">Level 4 only</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Allowed Directories</label>
+                            <textarea class="form-control" id="allowed-dirs" rows="2"
+                                placeholder="./data, ./logs"></textarea>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Advanced Features -->
                 <div class="col-12">
                     <div class="section-header">
                         <h2 class="section-header__title">
                             <span class="section-header__icon">🚀</span>
-                            Advanced Features
+                            Advanced
                         </h2>
-                        <span class="badge badge--new">v2.1</span>
                     </div>
                     <div class="card">
-                        <div class="form-group">
-                            <label class="form-label">Browser Automation</label>
-                            <select class="form-control" id="browser-enabled">
-                                <option value="true">Enabled</option>
-                                <option value="false">Disabled</option>
-                            </select>
-                            <p class="form-hint">Navigate websites, fill forms, screenshots (Requires Level 3+)</p>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">File System Access</label>
-                            <select class="form-control" id="filesystem-enabled">
-                                <option value="true">Enabled</option>
-                                <option value="false">Disabled</option>
-                            </select>
-                            <p class="form-hint">Read, write, manage files (Requires Level 2+)</p>
-                        </div>
                         <div class="form-group">
                             <label class="form-label">Self-Modification ⚠️</label>
                             <select class="form-control" id="selfmod-enabled">
                                 <option value="true">Enabled</option>
                                 <option value="false">Disabled</option>
                             </select>
-                            <p class="form-hint form-hint--error">CAUTION: Agent can modify own config (Requires Level 4)</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Permission System -->
-                <div class="col-12">
-                    <div class="section-header">
-                        <h2 class="section-header__title">
-                            <span class="section-header__icon">🔒</span>
-                            Permission System
-                        </h2>
-                        <span class="badge badge--success" id="permission-badge">Level 2</span>
-                    </div>
-                    <div class="card">
-                        <div class="form-group">
-                            <label class="form-label">Maximum Permission Level</label>
-                            <select class="form-control" id="permission-level">
-                                <option value="1">Level 1 - READ_ONLY (Safest)</option>
-                                <option value="2">Level 2 - WRITE_SAFE (Recommended)</option>
-                                <option value="3">Level 3 - EXECUTE_SAFE (Automation)</option>
-                                <option value="4">Level 4 - PRIVILEGED (Full Access)</option>
-                            </select>
-                            <p class="form-hint">Controls what operations the agent can perform</p>
+                            <p class="form-hint form-hint--error">Agent can modify own config</p>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Allowed Directories</label>
-                            <textarea class="form-control" id="allowed-dirs" rows="2"
-                                placeholder="./data, ./logs, ./tmp"></textarea>
-                            <p class="form-hint">Comma-separated paths where file operations are allowed</p>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Denied Directories</label>
-                            <textarea class="form-control" id="denied-dirs" rows="2"
-                                placeholder="./src, ./node_modules, ./.git"></textarea>
-                            <p class="form-hint">Comma-separated paths that are always forbidden</p>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Allowed Domains (Browser)</label>
-                            <textarea class="form-control" id="allowed-domains" rows="2"
-                                placeholder="*.github.com, example.com"></textarea>
-                            <p class="form-hint">Leave empty to allow all. Use * for wildcards</p>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Require Approval Level</label>
-                            <select class="form-control" id="approval-level">
-                                <option value="">No approval required</option>
-                                <option value="2">Level 2+</option>
-                                <option value="3">Level 3+</option>
-                                <option value="4">Level 4 only</option>
-                            </select>
-                            <p class="form-hint">Operations at or above this level require user confirmation</p>
+                            <label class="form-label">Browser & Filesystem</label>
+                            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                <select class="form-control" id="browser-enabled">
+                                    <option value="true">Browser ON</option>
+                                    <option value="false">Browser OFF</option>
+                                </select>
+                                <select class="form-control" id="filesystem-enabled">
+                                    <option value="true">FS ON</option>
+                                    <option value="false">FS OFF</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
