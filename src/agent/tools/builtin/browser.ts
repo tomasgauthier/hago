@@ -4,7 +4,7 @@
 
 import { chromium, type Browser, type Page, type BrowserContext } from 'playwright';
 import { z } from 'zod';
-import type { Tool } from '../registry.js';
+import type { ToolDefinition, ToolExecutionContext } from '../registry.js';
 import type { PermissionManager } from '../../../utils/permissions.js';
 import { PermissionLevel } from '../../../utils/permissions.js';
 import type { Logger } from 'pino';
@@ -92,13 +92,13 @@ export function createBrowserTools(
   logger: Logger,
   permissions: PermissionManager,
   browserManager: BrowserManager
-): Tool[] {
+): ToolDefinition[] {
   return [
     // Navigate to URL
     {
       name: 'browser_navigate',
       description: 'Navigate to a URL in the browser. Use this to visit websites and load web pages.',
-      schema: z.object({
+      parameters: z.object({
         url: z.string().describe('The URL to navigate to'),
         waitUntil: z
           .enum(['load', 'domcontentloaded', 'networkidle'])
@@ -106,14 +106,14 @@ export function createBrowserTools(
           .default('load')
           .describe('When to consider navigation successful'),
       }),
-      execute: async (params, context) => {
+      execute: async (params: any, context?: ToolExecutionContext) => {
         const { url, waitUntil } = params;
 
         // Check permissions
         permissions.checkPermission('browser_navigate', PermissionLevel.EXECUTE_SAFE);
         permissions.checkDomain(url);
 
-        const page = await browserManager.getOrCreatePage(context.sessionKey);
+        const page = await browserManager.getOrCreatePage(context?.sessionKey || 'default');
 
         try {
           await page.goto(url, { waitUntil, timeout: 30000 });
@@ -134,18 +134,18 @@ export function createBrowserTools(
     {
       name: 'browser_get_content',
       description: 'Get the text content of the current page. Useful for extracting information from web pages.',
-      schema: z.object({
+      parameters: z.object({
         selector: z
           .string()
           .optional()
           .describe('Optional CSS selector to get content from a specific element'),
       }),
-      execute: async (params, context) => {
+      execute: async (params: any, context?: ToolExecutionContext) => {
         const { selector } = params;
 
         permissions.checkPermission('browser_get_content', PermissionLevel.READ_ONLY);
 
-        const page = await browserManager.getOrCreatePage(context.sessionKey);
+        const page = await browserManager.getOrCreatePage(context?.sessionKey || 'default');
 
         try {
           let content: string;
@@ -178,7 +178,7 @@ export function createBrowserTools(
     {
       name: 'browser_click',
       description: 'Click an element on the page using a CSS selector. Useful for interacting with buttons, links, etc.',
-      schema: z.object({
+      parameters: z.object({
         selector: z.string().describe('CSS selector for the element to click'),
         waitForNavigation: z
           .boolean()
@@ -186,12 +186,12 @@ export function createBrowserTools(
           .default(false)
           .describe('Wait for navigation after clicking'),
       }),
-      execute: async (params, context) => {
+      execute: async (params: any, context?: ToolExecutionContext) => {
         const { selector, waitForNavigation } = params;
 
         permissions.checkPermission('browser_click', PermissionLevel.EXECUTE_SAFE);
 
-        const page = await browserManager.getOrCreatePage(context.sessionKey);
+        const page = await browserManager.getOrCreatePage(context?.sessionKey || 'default');
 
         try {
           const element = await page.$(selector);
@@ -221,16 +221,16 @@ export function createBrowserTools(
     {
       name: 'browser_fill',
       description: 'Fill a form field with text. Use CSS selector to target the input element.',
-      schema: z.object({
+      parameters: z.object({
         selector: z.string().describe('CSS selector for the input field'),
         value: z.string().describe('Text to fill into the field'),
       }),
-      execute: async (params, context) => {
+      execute: async (params: any, context?: ToolExecutionContext) => {
         const { selector, value } = params;
 
         permissions.checkPermission('browser_fill', PermissionLevel.EXECUTE_SAFE);
 
-        const page = await browserManager.getOrCreatePage(context.sessionKey);
+        const page = await browserManager.getOrCreatePage(context?.sessionKey || 'default');
 
         try {
           await page.fill(selector, value);
@@ -247,7 +247,7 @@ export function createBrowserTools(
     {
       name: 'browser_screenshot',
       description: 'Take a screenshot of the current page or a specific element. Returns the path to the saved screenshot.',
-      schema: z.object({
+      parameters: z.object({
         selector: z
           .string()
           .optional()
@@ -258,12 +258,12 @@ export function createBrowserTools(
           .default(false)
           .describe('Take a full page screenshot'),
       }),
-      execute: async (params, context) => {
+      execute: async (params: any, context?: ToolExecutionContext) => {
         const { selector, fullPage } = params;
 
         permissions.checkPermission('browser_screenshot', PermissionLevel.EXECUTE_SAFE);
 
-        const page = await browserManager.getOrCreatePage(context.sessionKey);
+        const page = await browserManager.getOrCreatePage(context?.sessionKey || 'default');
 
         try {
           const timestamp = Date.now();
@@ -297,15 +297,15 @@ export function createBrowserTools(
     {
       name: 'browser_evaluate',
       description: 'Execute JavaScript code in the browser context and return the result. Use with caution.',
-      schema: z.object({
+      parameters: z.object({
         code: z.string().describe('JavaScript code to execute'),
       }),
-      execute: async (params, context) => {
+      execute: async (params: any, context?: ToolExecutionContext) => {
         const { code } = params;
 
         permissions.checkPermission('browser_evaluate', PermissionLevel.EXECUTE_SAFE);
 
-        const page = await browserManager.getOrCreatePage(context.sessionKey);
+        const page = await browserManager.getOrCreatePage(context?.sessionKey || 'default');
 
         try {
           const result = await page.evaluate(code);
@@ -322,7 +322,7 @@ export function createBrowserTools(
     {
       name: 'browser_wait_for',
       description: 'Wait for an element to appear on the page. Useful when content loads dynamically.',
-      schema: z.object({
+      parameters: z.object({
         selector: z.string().describe('CSS selector to wait for'),
         timeoutMs: z
           .number()
@@ -330,12 +330,12 @@ export function createBrowserTools(
           .default(30000)
           .describe('Maximum time to wait in milliseconds'),
       }),
-      execute: async (params, context) => {
+      execute: async (params: any, context?: ToolExecutionContext) => {
         const { selector, timeoutMs } = params;
 
         permissions.checkPermission('browser_wait_for', PermissionLevel.EXECUTE_SAFE);
 
-        const page = await browserManager.getOrCreatePage(context.sessionKey);
+        const page = await browserManager.getOrCreatePage(context?.sessionKey || 'default');
 
         try {
           await page.waitForSelector(selector, { timeout: timeoutMs });
@@ -352,12 +352,12 @@ export function createBrowserTools(
     {
       name: 'browser_close',
       description: 'Close the browser session for this conversation. Use when done with browser automation.',
-      schema: z.object({}),
-      execute: async (_params, context) => {
+      parameters: z.object({}),
+      execute: async (_params: any, context?: ToolExecutionContext) => {
         permissions.checkPermission('browser_close', PermissionLevel.EXECUTE_SAFE);
 
-        await browserManager.closePage(context.sessionKey);
-        logger.info({ sessionKey: context.sessionKey }, 'Closed browser session');
+        await browserManager.closePage(context?.sessionKey || 'default');
+        logger.info({ sessionKey: context?.sessionKey || 'default' }, 'Closed browser session');
         return 'Browser session closed';
       },
     },

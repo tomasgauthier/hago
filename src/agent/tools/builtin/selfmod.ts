@@ -6,7 +6,7 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import JSON5 from 'json5';
 import { z } from 'zod';
-import type { Tool } from '../registry.js';
+import type { ToolDefinition, ToolExecutionContext } from '../registry.js';
 import type { PermissionManager } from '../../../utils/permissions.js';
 import { PermissionLevel } from '../../../utils/permissions.js';
 import type { Logger } from 'pino';
@@ -21,19 +21,19 @@ export function createSelfModTools(
   logger: Logger,
   permissions: PermissionManager,
   onConfigUpdate?: () => Promise<void>
-): Tool[] {
+): ToolDefinition[] {
   return [
     // Read current configuration
     {
       name: 'config_read',
       description: 'Read the current configuration. Use this to understand current settings before making changes.',
-      schema: z.object({
+      parameters: z.object({
         section: z
           .string()
           .optional()
           .describe('Optional: specific config section to read (e.g., "providers", "tools")'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { section } = params;
 
         permissions.checkPermission('config_read', PermissionLevel.READ_ONLY);
@@ -61,7 +61,7 @@ export function createSelfModTools(
     {
       name: 'config_update',
       description: 'Update a configuration value. This modifies the config.json5 file and triggers a reload. Use with extreme caution!',
-      schema: z.object({
+      parameters: z.object({
         path: z
           .string()
           .describe('Dot-notation path to the config value (e.g., "defaultProvider", "tools.enabled")'),
@@ -72,7 +72,7 @@ export function createSelfModTools(
           .default(true)
           .describe('Create a backup before modifying'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { path: configPath, value, createBackup } = params;
 
         permissions.checkPermission('config_update', PermissionLevel.PRIVILEGED);
@@ -136,13 +136,13 @@ Configuration has been reloaded.`;
     {
       name: 'config_add_provider',
       description: 'Add a new LLM provider to the configuration.',
-      schema: z.object({
+      parameters: z.object({
         id: z.string().describe('Unique provider ID'),
         type: z.enum(['gemini', 'claude', 'openai', 'ollama']).describe('Provider type'),
         model: z.string().describe('Model name'),
         apiKey: z.string().optional().describe('Optional API key (if different from default)'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { id, type, model, apiKey } = params;
 
         permissions.checkPermission('config_add_provider', PermissionLevel.PRIVILEGED);
@@ -195,10 +195,10 @@ Configuration has been reloaded.`;
     {
       name: 'config_remove_provider',
       description: 'Remove an LLM provider from the configuration.',
-      schema: z.object({
+      parameters: z.object({
         id: z.string().describe('Provider ID to remove'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { id } = params;
 
         permissions.checkPermission('config_remove_provider', PermissionLevel.PRIVILEGED);
@@ -244,7 +244,7 @@ Configuration has been reloaded.`;
     {
       name: 'config_list_backups',
       description: 'List all configuration backups that have been created.',
-      schema: z.object({}),
+      parameters: z.object({}),
       execute: async () => {
         permissions.checkPermission('config_list_backups', PermissionLevel.READ_ONLY);
 
@@ -281,10 +281,10 @@ Configuration has been reloaded.`;
     {
       name: 'config_restore_backup',
       description: 'Restore configuration from a backup file. Use with caution!',
-      schema: z.object({
+      parameters: z.object({
         filename: z.string().describe('Backup filename to restore from'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { filename } = params;
 
         permissions.checkPermission('config_restore_backup', PermissionLevel.PRIVILEGED);
@@ -320,7 +320,7 @@ Configuration has been reloaded.`;
     {
       name: 'system_info',
       description: 'Get information about the system Tombot is running on.',
-      schema: z.object({}),
+      parameters: z.object({}),
       execute: async () => {
         permissions.checkPermission('system_info', PermissionLevel.READ_ONLY);
 

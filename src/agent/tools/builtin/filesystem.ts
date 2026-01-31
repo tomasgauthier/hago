@@ -5,7 +5,7 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { z } from 'zod';
-import type { Tool } from '../registry.js';
+import type { ToolDefinition, ToolExecutionContext } from '../registry.js';
 import type { PermissionManager } from '../../../utils/permissions.js';
 import { PermissionLevel } from '../../../utils/permissions.js';
 import type { Logger } from 'pino';
@@ -16,13 +16,13 @@ import type { Logger } from 'pino';
 export function createFileSystemTools(
   logger: Logger,
   permissions: PermissionManager
-): Tool[] {
+): ToolDefinition[] {
   return [
     // Read file
     {
       name: 'fs_read_file',
       description: 'Read the contents of a file. Returns the file content as text.',
-      schema: z.object({
+      parameters: z.object({
         path: z.string().describe('Path to the file to read'),
         encoding: z
           .enum(['utf8', 'base64'])
@@ -30,7 +30,7 @@ export function createFileSystemTools(
           .default('utf8')
           .describe('File encoding (utf8 for text, base64 for binary)'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { path: filePath, encoding } = params;
 
         permissions.checkPermission('fs_read_file', PermissionLevel.READ_ONLY);
@@ -38,7 +38,7 @@ export function createFileSystemTools(
 
         try {
           const absolutePath = path.resolve(filePath);
-          const content = await fs.readFile(absolutePath, encoding);
+          const content = await fs.readFile(absolutePath, encoding as BufferEncoding);
 
           const stats = await fs.stat(absolutePath);
           const sizeKb = (stats.size / 1024).toFixed(2);
@@ -47,11 +47,12 @@ export function createFileSystemTools(
 
           // Truncate very large files
           const maxLength = 50000;
-          if (typeof content === 'string' && content.length > maxLength) {
-            return `${content.substring(0, maxLength)}\n\n... (file truncated, ${sizeKb}KB total)`;
+          const contentStr = content.toString();
+          if (contentStr.length > maxLength) {
+            return `${contentStr.substring(0, maxLength)}\n\n... (file truncated, ${sizeKb}KB total)`;
           }
 
-          return content;
+          return contentStr;
         } catch (error) {
           logger.error({ error, path: filePath }, 'Failed to read file');
           return `Failed to read file: ${error instanceof Error ? error.message : String(error)}`;
@@ -63,7 +64,7 @@ export function createFileSystemTools(
     {
       name: 'fs_write_file',
       description: 'Write content to a file. Creates the file if it doesn\'t exist, overwrites if it does.',
-      schema: z.object({
+      parameters: z.object({
         path: z.string().describe('Path to the file to write'),
         content: z.string().describe('Content to write to the file'),
         encoding: z
@@ -72,7 +73,7 @@ export function createFileSystemTools(
           .default('utf8')
           .describe('File encoding'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { path: filePath, content, encoding } = params;
 
         permissions.checkPermission('fs_write_file', PermissionLevel.WRITE_SAFE);
@@ -103,11 +104,11 @@ export function createFileSystemTools(
     {
       name: 'fs_append_file',
       description: 'Append content to the end of a file. Creates the file if it doesn\'t exist.',
-      schema: z.object({
+      parameters: z.object({
         path: z.string().describe('Path to the file to append to'),
         content: z.string().describe('Content to append to the file'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { path: filePath, content } = params;
 
         permissions.checkPermission('fs_append_file', PermissionLevel.WRITE_SAFE);
@@ -138,7 +139,7 @@ export function createFileSystemTools(
     {
       name: 'fs_list_directory',
       description: 'List files and directories in a directory. Returns names, sizes, and modification times.',
-      schema: z.object({
+      parameters: z.object({
         path: z.string().describe('Path to the directory to list'),
         recursive: z
           .boolean()
@@ -146,7 +147,7 @@ export function createFileSystemTools(
           .default(false)
           .describe('List subdirectories recursively'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { path: dirPath, recursive } = params;
 
         permissions.checkPermission('fs_list_directory', PermissionLevel.READ_ONLY);
@@ -201,10 +202,10 @@ export function createFileSystemTools(
     {
       name: 'fs_delete_file',
       description: 'Delete a file. Use with caution - this cannot be undone!',
-      schema: z.object({
+      parameters: z.object({
         path: z.string().describe('Path to the file to delete'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { path: filePath } = params;
 
         permissions.checkPermission('fs_delete_file', PermissionLevel.WRITE_SAFE);
@@ -237,10 +238,10 @@ export function createFileSystemTools(
     {
       name: 'fs_create_directory',
       description: 'Create a new directory. Creates parent directories if they don\'t exist.',
-      schema: z.object({
+      parameters: z.object({
         path: z.string().describe('Path to the directory to create'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { path: dirPath } = params;
 
         permissions.checkPermission('fs_create_directory', PermissionLevel.WRITE_SAFE);
@@ -264,7 +265,7 @@ export function createFileSystemTools(
     {
       name: 'fs_delete_directory',
       description: 'Delete a directory and all its contents. EXTREMELY DANGEROUS - use with extreme caution!',
-      schema: z.object({
+      parameters: z.object({
         path: z.string().describe('Path to the directory to delete'),
         recursive: z
           .boolean()
@@ -272,7 +273,7 @@ export function createFileSystemTools(
           .default(false)
           .describe('Delete directory and all contents recursively'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { path: dirPath, recursive } = params;
 
         // This is a privileged operation
@@ -304,11 +305,11 @@ export function createFileSystemTools(
     {
       name: 'fs_copy_file',
       description: 'Copy a file from source to destination.',
-      schema: z.object({
+      parameters: z.object({
         source: z.string().describe('Source file path'),
         destination: z.string().describe('Destination file path'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { source, destination } = params;
 
         permissions.checkPermission('fs_copy_file', PermissionLevel.WRITE_SAFE);
@@ -341,11 +342,11 @@ export function createFileSystemTools(
     {
       name: 'fs_move_file',
       description: 'Move or rename a file from source to destination.',
-      schema: z.object({
+      parameters: z.object({
         source: z.string().describe('Source file path'),
         destination: z.string().describe('Destination file path'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { source, destination } = params;
 
         permissions.checkPermission('fs_move_file', PermissionLevel.WRITE_SAFE);
@@ -375,10 +376,10 @@ export function createFileSystemTools(
     {
       name: 'fs_file_info',
       description: 'Get information about a file or directory (size, creation time, modification time, etc.).',
-      schema: z.object({
+      parameters: z.object({
         path: z.string().describe('Path to the file or directory'),
       }),
-      execute: async (params) => {
+      execute: async (params: any) => {
         const { path: filePath } = params;
 
         permissions.checkPermission('fs_file_info', PermissionLevel.READ_ONLY);
