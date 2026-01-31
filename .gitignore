@@ -35,8 +35,10 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
+*.code-workspace
 
 # Temporary files
 tmp/
