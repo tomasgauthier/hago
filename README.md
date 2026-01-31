@@ -13,6 +13,7 @@ A minimalistic yet powerful personal AI assistant from scratch. Inspired by Molt
 
 ### New Capabilities (v2.1)
 
+- **Admin Dashboard**: Web interface for configuration, cost tracking, and tool management
 - **Browser Automation**: Navigate websites, fill forms, click elements, take screenshots using Playwright
 - **File System Access**: Read, write, list, copy, move, and delete files with permission controls
 - **Self-Modification**: Agent can update its own configuration, add/remove providers, and manage settings
@@ -73,6 +74,7 @@ docker run -v $(pwd)/data:/app/data --env-file .env tombot
 Enable browser automation to let your AI assistant interact with websites:
 
 **Configuration** ([config.json5](config.json5)):
+
 ```json5
 {
   browser: { enabled: true },
@@ -81,6 +83,7 @@ Enable browser automation to let your AI assistant interact with websites:
 ```
 
 **Available Tools**:
+
 - `browser_navigate` - Navigate to URLs
 - `browser_get_content` - Extract text from pages
 - `browser_click` - Click elements
@@ -98,6 +101,7 @@ Enable browser automation to let your AI assistant interact with websites:
 Grant your AI assistant controlled access to the file system:
 
 **Configuration**:
+
 ```json5
 {
   filesystem: { enabled: true },
@@ -110,6 +114,7 @@ Grant your AI assistant controlled access to the file system:
 ```
 
 **Available Tools**:
+
 - `fs_read_file` - Read file contents
 - `fs_write_file` - Create or overwrite files
 - `fs_append_file` - Append to files
@@ -130,6 +135,7 @@ Grant your AI assistant controlled access to the file system:
 **⚠️ USE WITH EXTREME CAUTION** - Allow the AI to modify its own configuration:
 
 **Configuration**:
+
 ```json5
 {
   selfModification: { enabled: true },
@@ -138,6 +144,7 @@ Grant your AI assistant controlled access to the file system:
 ```
 
 **Available Tools**:
+
 - `config_read` - Read current configuration
 - `config_update` - Update configuration values
 - `config_add_provider` - Add new LLM providers
@@ -147,6 +154,7 @@ Grant your AI assistant controlled access to the file system:
 - `system_info` - Get system information
 
 **Safety Features**:
+
 - Automatic backups before any config change
 - Requires PRIVILEGED permission level
 - All modifications are logged
@@ -173,6 +181,7 @@ Tombot uses a tiered permission system to control what the AI can do:
 - **Experimental/Trusted**: `maxLevel: 4` (PRIVILEGED) - Use only in controlled environments
 
 **Safety Controls**:
+
 ```json5
 permissions: {
   maxLevel: 2,
@@ -189,24 +198,31 @@ permissions: {
 Tombot includes 25+ built-in tools across multiple categories:
 
 **Web & Search**:
+
 - `web_search` - Brave Search integration
 
 **Obsidian**:
+
 - `obsidian_search`, `obsidian_read`, `obsidian_create`, `obsidian_search_content`
 
 **Finance**:
+
 - `log_transaction`, `get_spending_summary`
 
 **Scheduling**:
+
 - `schedule_message`, `list_scheduled_messages`, `cancel_scheduled_message`
 
 **Cost Tracking**:
+
 - `get_usage_costs`, `estimate_message_cost`
 
 **Telegram**:
+
 - `telegram_create_poll`, `telegram_create_keyboard`, `telegram_react_to_message`, etc.
 
 **Spiritual Biology**:
+
 - `log_stress`, `confess_uncertainty`, `log_ethical_refusal`, `dream`, `get_learnings`, `log_guidance`
 
 **Browser Automation** (8 tools) - See above
@@ -214,6 +230,17 @@ Tombot includes 25+ built-in tools across multiple categories:
 **File System** (10 tools) - See above
 
 **Self-Modification** (7 tools) - See above
+
+## Admin Dashboard
+
+A built-in web dashboard is available to manage the bot:
+
+- **URL**: `http://localhost:3000/admin` (default)
+- **Features**:
+  - **Configuration Editor**: Safely modify `config.json5` with validation.
+  - **Cost Measurement**: Track token usage and costs by provider/model.
+  - **Tool Explorer**: View available tools and their definitions.
+  - **Logs**: View recent activity logs.
 
 ## Security Best Practices
 
@@ -228,16 +255,19 @@ Tombot includes 25+ built-in tools across multiple categories:
 ## Troubleshooting
 
 **Browser automation not working?**
+
 - Ensure Playwright is installed: `npx playwright install chromium`
 - Check permission level is 3 or higher
 - Verify domain is in `allowedDomains` (if configured)
 
 **File operations denied?**
+
 - Check path is in `allowedDirectories`
 - Verify path is not in `deniedDirectories`
 - Ensure permission level is 2 or higher
 
 **Self-modification disabled?**
+
 - Must set `selfModification.enabled: true`
 - Must set `permissions.maxLevel: 4`
 - Review security implications carefully
