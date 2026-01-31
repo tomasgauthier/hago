@@ -217,17 +217,44 @@ export function createBrowserTools(
       },
     },
 
-    // Evaluate JavaScript
+    // Evaluate JavaScript (sandboxed)
     {
       name: 'browser_evaluate',
-      description: 'Execute JavaScript code in the browser context and return the result. Use with caution.',
+      description: 'Execute JavaScript code in the browser context and return the result. Network requests, cookie access, and data exfiltration are blocked.',
       parameters: z.object({
         code: z.string().describe('JavaScript code to execute'),
       }),
       execute: async (params: any, context?: ToolExecutionContext) => {
         const { code } = params;
 
-        permissions.checkPermission('browser_evaluate', PermissionLevel.EXECUTE_SAFE);
+        // Require PRIVILEGED level — this is arbitrary code execution
+        permissions.checkPermission('browser_evaluate', PermissionLevel.PRIVILEGED);
+
+        // Block dangerous JS patterns that could exfiltrate data or hijack sessions
+        const BLOCKED_JS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+          { pattern: /\bfetch\s*\(/i, reason: 'fetch() calls (network exfiltration)' },
+          { pattern: /XMLHttpRequest/i, reason: 'XMLHttpRequest (network exfiltration)' },
+          { pattern: /\.sendBeacon\s*\(/i, reason: 'sendBeacon() (network exfiltration)' },
+          { pattern: /new\s+WebSocket/i, reason: 'WebSocket (network exfiltration)' },
+          { pattern: /new\s+EventSource/i, reason: 'EventSource (network exfiltration)' },
+          { pattern: /document\.cookie/i, reason: 'cookie access' },
+          { pattern: /localStorage/i, reason: 'localStorage access' },
+          { pattern: /sessionStorage/i, reason: 'sessionStorage access' },
+          { pattern: /indexedDB/i, reason: 'IndexedDB access' },
+          { pattern: /window\.open\s*\(/i, reason: 'window.open() (navigation hijack)' },
+          { pattern: /location\s*[.=]/i, reason: 'location manipulation (redirect)' },
+          { pattern: /\.src\s*=/i, reason: 'src attribute injection' },
+          { pattern: /importScripts/i, reason: 'importScripts (code loading)' },
+          { pattern: /Function\s*\(/i, reason: 'Function constructor (eval bypass)' },
+          { pattern: /eval\s*\(/i, reason: 'eval() (code injection)' },
+        ];
+
+        for (const { pattern, reason } of BLOCKED_JS_PATTERNS) {
+          if (pattern.test(code)) {
+            logger.warn({ code: code.slice(0, 200), reason }, 'Blocked dangerous browser_evaluate');
+            return `BLOCKED: JavaScript code contains ${reason}. This is not allowed for security reasons.`;
+          }
+        }
 
         const page = await browserManager.getOrCreatePage(context?.sessionKey || 'default');
 

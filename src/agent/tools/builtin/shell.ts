@@ -22,6 +22,18 @@ const ALLOWED_COMMANDS: string[] = [
 
 // Patterns that should NEVER appear in a command — prevents exfiltration & escalation
 const BLOCKED_PATTERNS: RegExp[] = [
+    // ── Command substitution & chaining (CRITICAL — prevents injection via arguments) ──
+    /`/,                  // backtick command substitution
+    /\$\(/,              // $() command substitution
+    /\|/,                // pipe (prevents chaining to exfil commands)
+    /;/,                 // command chaining
+    /&&/,                // conditional chaining
+    /\|\|/,              // OR chaining
+    />\s*/,              // output redirection
+    /<\s*/,              // input redirection
+    /\$\{/,              // variable expansion ${...}
+
+    // ── Network exfiltration ──
     /curl\s/i,
     /wget\s/i,
     /Invoke-WebRequest/i,
@@ -33,9 +45,13 @@ const BLOCKED_PATTERNS: RegExp[] = [
     /ftp\s/i,
     /nc\s/i,           // netcat
     /ncat\s/i,
+
+    // ── Shell escalation ──
     /powershell\s.*-e/i, // encoded commands
     /cmd\s*\/c/i,
     /reg\s+(add|delete|export|import)/i,
+
+    // ── Environment variable access ──
     /\benv\b.*PASSWORD/i,
     /\benv\b.*SECRET/i,
     /\benv\b.*TOKEN/i,
@@ -44,11 +60,13 @@ const BLOCKED_PATTERNS: RegExp[] = [
     /\btype\b.*\.env/i, // reading .env
     /cat\s+.*\.env/i,
     /Get-Content.*\.env/i,
-    // Block inline code execution (node -e, npx, tsx, etc.)
+
+    // ── Inline code execution ──
     /\bnode\b/i,
     /\bnpx\b/i,
     /\btsx\b/i,
-    // Block rm (destructive — use git or manual deletion instead)
+
+    // ── Destructive operations ──
     /\brm\s/i,
     /\bRemove-Item/i,
     /\bdel\s/i,

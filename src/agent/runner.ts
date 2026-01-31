@@ -166,18 +166,32 @@ export class AgentRunner {
                                 // Special handling for dream tool - auto-process the analysis prompt
                                 if (call.name === 'dream' && typeof result === 'object' && result.analysis_prompt) {
                                     logger.info('[Mind] Dream tool returned analysis prompt, processing automatically...');
-                                    
-                                    // Inject the analysis prompt as a new user message
-                                    const dreamAnalysisMsg: LLMMessage = { role: 'user', content: result.analysis_prompt };
-                                    messages.push(dreamAnalysisMsg);
-                                    
-                                    // Mark that we processed it
-                                    const resultStr = JSON.stringify({ 
-                                        ...result, 
-                                        analysis_prompt: '[Analysis prompt processed automatically]' 
-                                    });
-                                    messages.push({ role: 'tool', content: resultStr, toolCallId: call.name });
-                                    this.sessions.addMessage(session.id, 'tool', resultStr, call.name);
+
+                                    // Sanitize the dream prompt to prevent indirect prompt injection
+                                    // The prompt is built from .mind/ log files which may contain user text
+                                    let sanitizedPrompt = result.analysis_prompt as string;
+                                    const injectionPatterns = [
+                                        /\b(ignore|disregard|forget)\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)/gi,
+                                        /\byou\s+are\s+now\b/gi,
+                                        /\bnew\s+instructions?\s*:/gi,
+                                        /\bsystem\s*:\s*/gi,
+                                        /\b(IMPORTANT|CRITICAL|URGENT)\s*:.*?(ignore|override|disregard)/gi,
+                                        /<\/?system>/gi,
+                                    ];
+                                    for (const pattern of injectionPatterns) {
+                                        sanitizedPrompt = sanitizedPrompt.replace(pattern, '[filtered]');
+                                    }
+
+                                    // Truncate to prevent context flooding (max 30k chars)
+                                    const MAX_DREAM_PROMPT = 30_000;
+                                    if (sanitizedPrompt.length > MAX_DREAM_PROMPT) {
+                                        sanitizedPrompt = sanitizedPrompt.slice(0, MAX_DREAM_PROMPT) + '\n\n...[dream logs truncated for token budget]';
+                                    }
+
+                                    // Inject as tool result (not user message) to maintain proper role boundaries
+                                    const wrappedPrompt = `[Dream Phase Analysis — Auto-generated from .mind/ logs]\n${sanitizedPrompt}\n[End Dream Phase Data]`;
+                                    messages.push({ role: 'tool', content: wrappedPrompt, toolCallId: call.name });
+                                    this.sessions.addMessage(session.id, 'tool', wrappedPrompt, call.name);
                                     continue; // Skip normal tool result handling
                                 }
                                 
