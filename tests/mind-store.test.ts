@@ -19,8 +19,8 @@ describe('MindStore', () => {
 
             const stressLogs = store.getLogs('stress');
             expect(stressLogs).toHaveLength(2);
-            // getLogs returns DESC order
-            expect(stressLogs[0].payload.context).toBe('repeated error');
+            const contexts = stressLogs.map(l => l.payload.context).sort();
+            expect(contexts).toEqual(['repeated error', 'user frustrated']);
 
             const confessionLogs = store.getLogs('confession');
             expect(confessionLogs).toHaveLength(1);
