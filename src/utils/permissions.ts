@@ -210,10 +210,9 @@ export class PermissionManager {
   }
 
   private normalizePath(inputPath: string): string {
-    // Resolve to absolute path first (handles ../ traversal), then normalize
-    const resolved = inputPath.startsWith('/')
-      ? inputPath
-      : inputPath; // relative paths stay relative for pattern matching
+    // Resolve to absolute path to collapse ../ traversal sequences
+    const path = require('path');
+    const resolved = path.resolve(inputPath);
     return resolved.replace(/\\/g, '/').replace(/\/+/g, '/').toLowerCase();
   }
 }

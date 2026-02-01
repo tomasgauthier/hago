@@ -67,6 +67,16 @@ export function createSelfModTools(
         const { path: configPath, value, createBackup: shouldBackup } = params;
         permissions.checkPermission('config_update', PermissionLevel.PRIVILEGED);
 
+        // Allowlist of modifiable config paths — block security-sensitive paths
+        const ALLOWED_CONFIG_PREFIXES = [
+          'defaultProvider', 'providers', 'channels', 'tools',
+          'spiritualBiology', 'memory', 'identity',
+        ];
+        const topLevel = configPath.split('.')[0];
+        if (!ALLOWED_CONFIG_PREFIXES.includes(topLevel)) {
+          return `Config path "${configPath}" is not modifiable. Allowed top-level keys: ${ALLOWED_CONFIG_PREFIXES.join(', ')}`;
+        }
+
         try {
           const { raw, parsed: config } = await readConfig();
 
@@ -197,6 +207,11 @@ export function createSelfModTools(
         permissions.checkPermission('config_restore_backup', PermissionLevel.PRIVILEGED);
 
         try {
+          // Validate filename: must be a simple backup filename, no path separators
+          if (/[\/\\]/.test(filename) || !filename.startsWith('config.json5.backup.')) {
+            return 'Invalid backup filename. Must be a config.json5.backup.* file in the project root.';
+          }
+
           await fs.access(filename);
 
           const currentConfig = await fs.readFile(CONFIG_PATH, 'utf8');

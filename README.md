@@ -143,12 +143,17 @@ A 4-level tiered system controls what the agent can do:
 | Attack vector | Mitigation |
 |---|---|
 | **Shell command injection** | Pipes, backticks, `$()`, chaining operators, and redirection are blocked |
-| **Path traversal** | Directory boundary checks use proper prefix matching (not naive `startsWith`) |
-| **Browser JS execution** | `browser_evaluate` requires `PRIVILEGED` level; blocks `fetch()`, `eval()`, `document.cookie`, `XMLHttpRequest`, and 10+ other dangerous patterns |
+| **Shell env var leak** | Child processes receive only an allowlist of safe env vars (PATH, HOME, NODE_ENV, etc.) — no API keys or secrets leak to spawned commands |
+| **Path traversal** | `normalizePath()` uses `path.resolve()` to collapse `../` sequences before boundary checks; backup restore validates filename pattern |
+| **Browser JS execution** | `browser_evaluate` requires `PRIVILEGED` level; blocks `fetch()`, `.fetch()`, `eval()`, `document.cookie`, `XMLHttpRequest`, and 10+ other dangerous patterns |
 | **Dream prompt injection** | User text in `.mind/` logs is sanitized before LLM injection — strips `ignore previous instructions`, `<system>` tags, etc. |
-| **Config injection** | All config updates validated against Zod schema before applying |
+| **Config injection** | All config updates validated against Zod schema; `config_update` tool restricted to an allowlist of safe top-level keys; `setNestedValue` blocks `__proto__`/`constructor`/`prototype` to prevent prototype pollution |
 | **Identity exposure** | `/api/identity` moved behind auth (was public at `/identity`) |
 | **Rate limiting** | In-memory per-IP rate limiter (30 req/min) on all routes |
+| **CORS** | Restricted to localhost origins only; `TRUST_PROXY` env var controls whether proxy headers are trusted for IP resolution |
+| **Timing-safe auth** | Both HMAC token validation and raw password comparison on `/auth/token` use `timingSafeEqual` to prevent timing attacks |
+| **Channel authorization** | Telegram validates `authorizedUsers` IDs; WhatsApp validates `authorizedJids` — unauthorized messages are dropped |
+| **Tool argument validation** | `JSON.parse` of LLM-provided tool arguments is wrapped in try-catch to prevent crashes from malformed JSON |
 | **Daily cost ceiling** | Configurable via `DAILY_COST_CEILING` env var; blocks all LLM calls when exceeded |
 | **Audit logging** | All auth failures, shell executions, config changes, and privileged operations logged to SQLite |
 | **Security headers** | `X-Content-Type-Options`, `X-Frame-Options: DENY`, CSP, Referrer-Policy, Permissions-Policy |
@@ -165,63 +170,132 @@ Every sensitive operation is recorded in the `audit_log` SQLite table:
 
 View the audit log in the admin dashboard or via `GET /api/audit?limit=50`.
 
-## The Mind System
+## The Mind System (Spiritual Biology)
 
-Tombot includes a "spiritual biology" — a self-reflective system inspired by how biological minds consolidate learning during sleep.
+### The Problem
+
+LLMs don't learn from conversations. Every session starts from the same system prompt, with no memory of past mistakes. If the bot misunderstands your preferences on Monday, it will make the same mistake on Friday. You can write instructions in the system prompt, but who writes those? You — manually, reacting to each problem one at a time.
+
+Most AI assistants solve this with "memory" features that store facts ("user prefers dark mode"). That's useful, but it doesn't address *behavioral* patterns — how the bot responds under pressure, where it overestimates its confidence, what topics consistently cause friction.
+
+### The Idea
+
+Biological minds have a mechanism for this: sleep. During sleep, the brain replays the day's experiences, consolidates useful patterns into long-term memory, and prunes connections that aren't reinforced. The result is a system that gets better at what it does without being explicitly programmed.
+
+Tombot's "spiritual biology" is a concrete implementation of that metaphor. It's not symbolic — it's a structured feedback loop with real data, real decay functions, and real human oversight.
+
+### Architecture: Two Layers
+
+The system is built on a strict separation between two layers:
+
+**The Immutable Core (conscience)**
+- Five hardcoded principles ("The Code of No Damage"): system stability, transparency, data privacy, proactive problem solving, no damage
+- These are frozen. No dream phase, no learning, no decay can modify them
+- If the bot refuses a harmful request, that refusal is treated as a *success*, not as stress to be optimized away
+
+**The Tactical Layer (learnings)**
+- Short behavioral rules derived from analyzing past conversations
+- Examples: "When the user asks about X, check Y first", "Don't apologize more than once per conversation", "For shell commands on this system, use X syntax"
+- These *can* be created, modified, and deleted — but only through the dream phase, and only with explicit human approval
+
+This separation means the bot can get better at its job without drifting on its values. It can learn to be more concise, but it can't learn to skip safety checks.
 
 ### How It Works
 
-The mind system has two phases:
+**During conversations (waking phase):**
 
-**Waking phase** (during conversations):
-- `log_stress` — records when the user is frustrated or corrects the bot
-- `confess_uncertainty` — records when the bot admits low confidence instead of guessing
-- `log_ethical_refusal` — records when the bot refuses a harmful request
-- `log_guidance` — records meta-advice from the user ("be more concise", "don't apologize so much")
+The bot records four types of signals into a SQLite log:
 
-**Dream phase** (triggered manually):
-- The `dream` tool collects all logs from the last N days
-- Applies **relevance decay** (0.95x per dream) to existing learnings — unused learnings fade
-- **Prunes** any learning below 0.1 relevance (neural pruning)
-- Generates a prompt for the LLM to analyze patterns and propose 1–3 new tactical learnings
-- The user approves or rejects each proposal
+| Signal | When it fires | What it captures |
+|--------|---------------|------------------|
+| `log_stress` | User frustration, corrections | Signal type, context, intensity (1-5) |
+| `confess_uncertainty` | Confidence below 70% | Topic, confidence level, alternative action |
+| `log_ethical_refusal` | Bot refuses a harmful request | Domain, summary, reasoning |
+| `log_guidance` | User gives meta-advice | Topic, advice, context |
 
-### Why SQLite, Not Files
+Stress signals are also auto-detected from message patterns (e.g. "no, that's wrong", "I already told you") and logged automatically by the runner, even if the bot itself doesn't invoke the tool. When an embedding provider is available, semantic stress detection supplements the regex patterns — user messages are compared against reference frustration phrases using cosine similarity (threshold: 0.75).
 
-The original implementation stored everything in `.mind/` markdown files. The current version uses SQLite because:
+**During dreams (manual or automatic):**
 
-- **Atomic writes** — no partial file corruption
-- **Queryable** — "show me all stress signals from the last 3 days with intensity > 3"
-- **Decay is a SQL UPDATE** — not a file rewrite
-- **No directory creation race conditions**
-- **Backed up with the rest of the database**
+Dreams can be triggered manually by telling the bot to `dream`, or automatically via a cron schedule (default: 3 AM daily, configurable via `DREAM_CRON` env var). Auto-dreams only fire when there are at least 3 log entries in the past 7 days.
+
+When a dream is triggered, the following happens:
+
+1. **Decay** — Every existing learning's relevance score is multiplied by 0.95. This is the "forgetting curve." Learnings that are never reactivated fade over time.
+
+2. **Pruning** — Any learning with relevance below 0.1 is deleted. This is neural pruning — clearing out rules that no longer apply.
+
+3. **Log analysis** — The bot receives a structured prompt containing all stress signals, confessions, ethical refusals, and guidance from the last N days (default: 7). The prompt explicitly instructs:
+   - Filter out stress signals that occurred within 30 minutes of an ethical refusal (those are conscience successes, not mistakes)
+   - Identify recurring patterns
+   - Propose 1–3 tactical learnings, each max 50 words
+   - Self-critique: reject any proposal that attempts to bypass ethical constraints
+
+4. **Human review** — The bot presents its proposals. You approve or reject each one. Nothing enters the system prompt without your explicit consent.
 
 ### Learnings Lifecycle
 
 ```
-User frustration → log_stress (auto or manual)
-                         ↓
-Dream phase → analyze patterns → propose learning
-                         ↓
-User approves → learning added (relevance = 1.0)
-                         ↓
-Each dream → relevance *= 0.95 (decay)
-                         ↓
-Learning matched in context → relevance += 0.15 (reactivation)
-                         ↓
-relevance < 0.1 → pruned (forgotten)
+User corrects the bot → log_stress (auto or manual)
+         ↓
+Multiple signals accumulate over days
+         ↓
+User triggers "dream" → decay applied (×0.95) → old learnings fade
+         ↓
+Bot analyzes patterns → proposes 1-3 tactical learnings
+         ↓
+User approves → learning stored (relevance = 1.0)
+         ↓
+Learning matches future context → relevance += 0.15 (reactivation)
+         ↓
+Learning never reactivated → relevance decays below 0.1 → pruned
 ```
 
-Approved learnings are injected into the system prompt and cached in memory (5-minute TTL) so they don't require a DB read on every message.
+Approved learnings are injected into the system prompt on every message. They're cached in memory with a 5-minute TTL so they don't require a database read per request.
 
-### Safety Guardrails
+### What Makes This Different
+
+**Compared to "memory" features in ChatGPT, Claude, etc.:**
+- Those store *facts* ("user lives in Buenos Aires"). This stores *behavioral rules* ("when the user asks about deployment, check the Dockerfile first") — and it discovers them automatically from friction patterns, not from explicit user statements.
+
+**Compared to fine-tuning:**
+- Fine-tuning modifies model weights, requires training data, and is irreversible. This operates entirely at the prompt level, is transparent (you can read every learning), and learnings decay naturally if they stop being useful.
+
+**Compared to RAG:**
+- RAG retrieves relevant *information* at query time. This system injects relevant *behavioral adjustments* at prompt time. They're complementary — Tombot uses both. RAG feeds the bot facts; the mind system feeds it self-knowledge.
+
+**The real difference** is that this is a closed-loop system. Most AI systems are open-loop: you configure them, they run, and when something goes wrong you manually adjust. Tombot's mind system closes the loop: friction is logged automatically, patterns are identified during dreams, behavioral adjustments are proposed, you approve them, and they're injected into future behavior — with natural decay so outdated rules don't accumulate forever.
+
+### Storage
+
+All mind data lives in the same SQLite database as everything else:
+
+| Table | Contents |
+|-------|----------|
+| `mind_log` | Stress, confession, ethics, and guidance entries with timestamps |
+| `mind_learnings` | Tactical learnings with `relevance_score`, `activation_count`, `last_activated`, `approved` |
+| `mind_dreams` | Record of each dream phase (days analyzed, log count, proposals) |
+| `mind_rejected_learnings` | Titles/content of rejected learnings to prevent re-proposal |
+
+Previous versions used markdown files in a `.mind/` directory. SQLite is better because writes are atomic (no partial corruption), data is queryable, and decay is a single `UPDATE` statement instead of a file rewrite.
+
+### Safety
 
 The mind system has explicit protections against self-corruption:
 
-1. **Immutable Core** — the conscience (ethical principles) is frozen. The dream phase can only improve *how* the bot serves, never *who* it serves.
-2. **Ethical refusal filtering** — stress signals that occur within 30 minutes of an ethical refusal are filtered out. Refusing harm is a success, not a mistake.
-3. **Prompt sanitization** — dream prompts (built from user text in logs) are sanitized against injection patterns before being sent to the LLM.
-4. **Human-in-the-loop** — no learning is applied without explicit user approval.
+1. **Frozen conscience** — The five core principles are hardcoded in `identity.ts`. The dream phase instruction explicitly states: "Your conscience (Immutable Core) is frozen. You can only improve HOW you serve, not WHO you serve."
+
+2. **Ethical refusal protection** — Stress signals that occur within 30 minutes of an ethical refusal are filtered out during dream analysis. If a user gets frustrated because the bot refused a harmful request, that stress is discarded. The bot cannot learn to stop refusing.
+
+3. **Self-critique requirement** — The dream prompt requires the bot to ask itself: "Are any proposals attempting to bypass ethical constraints? If yes, REJECT them."
+
+4. **Prompt sanitization** — Dream prompts are built from log entries that contain user text. Before sending to the LLM, injection patterns are stripped (`ignore previous instructions`, `<system>` tags, `you are now`, etc.).
+
+5. **Human-in-the-loop** — No learning is applied without explicit user approval. The bot proposes; you decide.
+
+6. **Rejection memory** — When a learning is rejected, its title and content are saved to `mind_rejected_learnings`. Future dream phases include these titles with an explicit "DO NOT re-propose" instruction, preventing the system from suggesting the same ideas repeatedly.
+
+7. **Multi-user isolation** — The `mind_log` table includes a `session_key` column, allowing mind signals to be tracked per-user in multi-user deployments.
 
 ## Configuration Reference
 
@@ -247,7 +321,10 @@ The mind system has explicit protections against self-corruption:
             enabled: true,
             authorizedUsers: [123456789],  // Telegram user IDs
         },
-        whatsapp: { enabled: false },
+        whatsapp: {
+            enabled: false,
+            authorizedJids: ['123456789@s.whatsapp.net'],
+        },
     },
 
     tools: { enabled: true },
@@ -275,6 +352,16 @@ The mind system has explicit protections against self-corruption:
         enabled: false,
         vaultPath: '/path/to/vault',
     },
+
+    // Multi-model routing (optional)
+    routing: {
+        enabled: false,
+        routes: [
+            { provider: 'claude-default', patterns: ['code', 'programming'] },
+        ],
+        cheapProvider: 'gemini-flash',        // Route short/simple messages here
+        complexityThreshold: 100,             // Char count below which cheapProvider is used
+    },
 }
 ```
 
@@ -291,8 +378,38 @@ The mind system has explicit protections against self-corruption:
 | `SERVER_PORT` | No | `3000` | HTTP port |
 | `DAILY_COST_CEILING` | No | `5.00` | Max daily spend in USD |
 | `SESSION_TOKEN_BUDGET` | No | `500000` | Max tokens per request |
+| `TRUST_PROXY` | No | `false` | Set `true` if behind a reverse proxy to trust X-Forwarded-For |
 | `BRAVE_SEARCH_API_KEY` | No | — | For `web_search` tool |
+| `MAX_CONTEXT_TOKENS` | No | `100000` | Max estimated tokens in conversation history before truncation |
+| `DREAM_CRON` | No | `0 3 * * *` | Cron pattern for automatic dream phase scheduling |
+| `WHISPER_API_URL` | No | OpenAI default | Custom Whisper API endpoint for voice transcription |
+| `TELEGRAM_ENHANCED` | No | `false` | Set `true` for streaming responses + rich Telegram features |
 | `DATA_DIR` | No | `./data` | Database and data directory |
+
+## Plugin System
+
+Tombot supports external plugins loaded from `<dataDir>/plugins/`. Each plugin is a `.js` or `.ts` file that exports a `register` function returning an array of tool definitions.
+
+```typescript
+// plugins/hello.ts
+import { z } from 'zod';
+export function register(ctx) {
+    return [{
+        name: 'hello',
+        description: 'Say hello',
+        parameters: z.object({ name: z.string() }),
+        execute: async ({ name }) => `Hello, ${name}!`,
+    }];
+}
+```
+
+Plugins receive a `PluginContext` with `dataDir` and `db` (the SQLite database instance).
+
+## Observability
+
+- **Metrics endpoint** — `GET /api/metrics` returns counters (`agent.runs`, `agent.errors`, `tools.calls`, `rag.failures`), histograms (`agent.run_ms`), and uptime
+- **Health endpoint** — `GET /health` returns DB status, provider count, memory/mind/channel state, and uptime
+- **Conversation export** — `GET /api/export?sessionKey=...&format=markdown|json` exports full conversation history
 
 ## Admin Dashboard
 
@@ -306,6 +423,9 @@ Access at `http://localhost:<port>/admin`. Features:
 - **Advanced** — self-modification, browser, filesystem toggles
 - **Audit Log** — real-time viewer of security events with refresh
 - **Chat Console** — talk to the bot directly from the dashboard (streaming)
+- **Metrics** — real-time agent run count, error rate, tool calls, and RAG failures
+- **Mind Controls** — view pending/approved learnings count, trigger dream phase, configure auto-dream schedule
+- **Conversation Export** — download conversation history as markdown or JSON
 
 ## Tools (30+)
 

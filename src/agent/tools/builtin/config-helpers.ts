@@ -46,8 +46,17 @@ export async function listBackups(): Promise<{ filename: string; date: string; s
 /**
  * Set a value at a dot-notation path in an object
  */
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 export function setNestedValue(obj: any, dotPath: string, value: unknown): { oldValue: unknown } {
   const parts = dotPath.split('.');
+
+  for (const part of parts) {
+    if (FORBIDDEN_KEYS.has(part)) {
+      throw new Error(`Forbidden config path segment: "${part}"`);
+    }
+  }
+
   let current = obj;
 
   for (let i = 0; i < parts.length - 1; i++) {

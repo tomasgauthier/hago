@@ -25,12 +25,24 @@ export interface StreamEvent {
     usage?: TokenUsage;
 }
 
-export interface LLMProvider {
+/** Core chat completion interface — all providers must implement this */
+export interface ChatProvider {
     id: string;
     stream(params: {
         systemPrompt: string;
         messages: LLMMessage[];
-        tools?: any[]; // Unified tool definitions
+        tools?: any[];
     }): AsyncGenerator<StreamEvent>;
+}
+
+/** Embedding-capable provider — only required for RAG */
+export interface EmbeddingProvider {
+    id: string;
     getEmbedding(text: string): Promise<number[]>;
 }
+
+/**
+ * Combined interface for backwards compatibility.
+ * Providers that support both chat and embedding implement this.
+ */
+export interface LLMProvider extends ChatProvider, EmbeddingProvider {}

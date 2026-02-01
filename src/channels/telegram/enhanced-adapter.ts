@@ -321,4 +321,58 @@ export class EnhancedTelegramChannel implements Channel {
     getLastMessageId(sessionKey: string): number | undefined {
         return this.messageHistory.get(sessionKey);
     }
+
+    /**
+     * Stream a response to Telegram by sending a placeholder and editing it with chunks.
+     * Updates are throttled to avoid Telegram rate limits (~30 edits/min per chat).
+     */
+    async streamResponse(sessionKey: string, textStream: AsyncIterable<string>): Promise<void> {
+        const chatId = sessionKey.split(':')[1];
+        let fullText = '';
+        let messageId: number | null = null;
+        let lastEditTime = 0;
+        const MIN_EDIT_INTERVAL_MS = 1500; // Throttle edits to avoid rate limits
+
+        for await (const chunk of textStream) {
+            fullText += chunk;
+
+            if (!messageId) {
+                // Send initial message with first chunk
+                try {
+                    const sent = await this.bot.api.sendMessage(chatId, fullText + ' ▍');
+                    messageId = sent.message_id;
+                    lastEditTime = Date.now();
+                } catch (err: any) {
+                    logger.error(`Telegram stream start error: ${err.message}`);
+                    return;
+                }
+                continue;
+            }
+
+            // Throttle edits
+            const now = Date.now();
+            if (now - lastEditTime < MIN_EDIT_INTERVAL_MS) continue;
+
+            try {
+                await this.bot.api.editMessageText(chatId, messageId, fullText + ' ▍');
+                lastEditTime = now;
+            } catch (err: any) {
+                // Ignore edit errors (message not modified, etc.)
+                if (!err.message.includes('message is not modified')) {
+                    logger.warn(`Telegram stream edit error: ${err.message}`);
+                }
+            }
+        }
+
+        // Final edit — remove cursor indicator
+        if (messageId && fullText) {
+            try {
+                await this.bot.api.editMessageText(chatId, messageId, fullText, { parse_mode: 'Markdown' });
+            } catch {
+                // Fallback without markdown
+                try { await this.bot.api.editMessageText(chatId, messageId, fullText); } catch { /* ignore */ }
+            }
+            this.messageHistory.set(sessionKey, messageId);
+        }
+    }
 }

@@ -229,12 +229,31 @@ export class ChannelManager {
     }
 
     async stop() {
-        // Flush any pending batches before shutdown
+        // Process any pending batches before shutdown (don't discard — they're already ACK'd by Telegram)
         for (const [key, batch] of this.pendingBatches) {
             clearTimeout(batch.timer);
             this.pendingBatches.delete(key);
-            logger.warn(`Discarding ${batch.messages.length} unbatched messages for ${key} on shutdown`);
+            if (batch.messages.length > 0) {
+                const channelId = batch.messages[0].channelId;
+                const channel = this.channels.get(channelId);
+                if (channel) {
+                    logger.info(`Flushing ${batch.messages.length} pending messages for ${key} before shutdown`);
+                    try {
+                        await this.flushBatch(batch.messages, channel);
+                    } catch (err: any) {
+                        logger.error(`Failed to flush batch for ${key} on shutdown: ${err.message}`);
+                    }
+                }
+            }
         }
+
+        // Wait for any in-flight processing to finish
+        const pending = Array.from(this.processingQueues.values());
+        if (pending.length > 0) {
+            logger.info(`Waiting for ${pending.length} in-flight message(s) to finish...`);
+            await Promise.allSettled(pending);
+        }
+
         for (const channel of this.channels.values()) {
             await channel.stop();
         }

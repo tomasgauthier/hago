@@ -230,12 +230,3 @@ Use this when the user gives calibration advice, behavioral preferences, or cons
         logGuidanceTool,
     ];
 }
-
-// Legacy named exports for backward compatibility with container.ts imports
-// These will be replaced once container.ts is updated to use the factory
-export const logStressTool = null as any;
-export const confessUncertaintyTool = null as any;
-export const logEthicalRefusalTool = null as any;
-export const dreamTool = null as any;
-export const getLearningsTool = null as any;
-export const logGuidanceTool = null as any;

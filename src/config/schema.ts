@@ -53,6 +53,7 @@ export const AppConfigSchema = z.object({
         whatsapp: z.object({
             enabled: z.boolean().default(false),
             phoneNumber: z.string().optional(),
+            authorizedJids: z.array(z.string()).optional(), // List of WhatsApp JIDs (phone@s.whatsapp.net)
         }).optional(),
     }).default({}),
     obsidian: z.object({

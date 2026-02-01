@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { metrics } from '../../utils/metrics.js';
 
 export interface ToolDefinition {
     name: string;
@@ -74,11 +75,31 @@ export class ToolRegistry {
         const tool = this.getTool(name);
         if (!tool) throw new Error(`Tool ${name} not found`);
 
-        const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+        let parsedArgs: any;
+        if (typeof args === 'string') {
+            try {
+                parsedArgs = JSON.parse(args);
+            } catch {
+                throw new Error(`Invalid JSON in tool arguments for ${name}: ${args.slice(0, 200)}`);
+            }
+        } else {
+            parsedArgs = args;
+        }
         const validatedArgs = tool.parameters.parse(parsedArgs);
 
-        const rawResult = await tool.execute(validatedArgs, context);
-        return this.sanitizeToolResult(rawResult);
+        metrics.increment('tools.calls');
+        const toolStart = performance.now();
+        try {
+            const rawResult = await tool.execute(validatedArgs, context);
+            metrics.observe(`tools.${name}_ms`, performance.now() - toolStart);
+            return this.sanitizeToolResult(rawResult);
+        } catch (err: any) {
+            metrics.increment('tools.errors');
+            metrics.observe(`tools.${name}_ms`, performance.now() - toolStart);
+            // Structured error: sanitize stack traces before returning to LLM
+            const safeError = err.message?.replace(/\/home\/[^\s]+/g, '[path]') || 'Unknown error';
+            throw new Error(`Tool "${name}" failed: ${safeError}`);
+        }
     }
 
     /**

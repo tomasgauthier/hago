@@ -10,6 +10,7 @@ import { IDENTITY } from '../agent/identity.js';
 import { logger } from '../utils/logger.js';
 import { verifyAuthorization, generateToken } from '../utils/auth.js';
 import { AuditLog } from '../utils/audit.js';
+import { metrics } from '../utils/metrics.js';
 
 // ── Rate Limiter (in-memory, per-IP) ────────────────────────────────
 interface RateBucket {
@@ -53,9 +54,13 @@ function getDailyCost(container: AppContainer): number {
 }
 
 function getClientIp(c: any): string {
-    return c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-        || c.req.header('x-real-ip')
-        || '127.0.0.1';
+    // Only trust proxy headers if TRUST_PROXY is set (e.g. behind nginx/cloudflare)
+    if (process.env.TRUST_PROXY === 'true') {
+        return c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+            || c.req.header('x-real-ip')
+            || '127.0.0.1';
+    }
+    return '127.0.0.1';
 }
 
 export function createServer(container: AppContainer) {
@@ -63,7 +68,10 @@ export function createServer(container: AppContainer) {
     const audit = new AuditLog(container.sessions.db);
 
     app.use('*', honoLogger());
-    app.use('*', cors());
+    app.use('*', cors({
+        origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+        credentials: true,
+    }));
 
     // ── Security headers ─────────────────────────────────────────────
     app.use('*', async (c, next) => {
@@ -123,7 +131,16 @@ export function createServer(container: AppContainer) {
         const body = await c.req.json().catch(() => ({}));
         const { password } = body as { password?: string };
 
-        if (!password || password !== adminPassword) {
+        const passwordValid = password && (() => {
+            try {
+                const a = Buffer.from(String(password));
+                const b = Buffer.from(adminPassword);
+                if (a.length !== b.length) return false;
+                const { timingSafeEqual } = require('node:crypto');
+                return timingSafeEqual(a, b);
+            } catch { return false; }
+        })();
+        if (!passwordValid) {
             const ip = getClientIp(c);
             audit.log({
                 action: 'auth_failure',
@@ -152,7 +169,31 @@ export function createServer(container: AppContainer) {
     app.use('/admin/*', serveStatic({ root: 'src/server/public' }));
 
     // Public routes (no auth needed)
-    app.get('/health', (c) => c.json({ status: 'ok', version: '2.0.0' }));
+    app.get('/health', (c) => {
+        const dbOk = (() => { try { container.sessions.db.prepare('SELECT 1').get(); return true; } catch { return false; } })();
+        const providerCount = container.config.providers.length;
+        const memoryEnabled = container.config.memory.enabled;
+        const mindEnabled = container.config.spiritualBiology?.enabled || false;
+
+        return c.json({
+            status: dbOk ? 'ok' : 'degraded',
+            version: '2.3.0',
+            db: dbOk ? 'connected' : 'error',
+            providers: providerCount,
+            memory: memoryEnabled ? 'enabled' : 'disabled',
+            mind: mindEnabled ? 'enabled' : 'disabled',
+            channels: {
+                telegram: container.config.channels.telegram?.enabled || false,
+                whatsapp: container.config.channels.whatsapp?.enabled || false,
+            },
+            uptime_seconds: Math.floor(process.uptime()),
+        });
+    });
+
+    // Metrics endpoint (behind auth)
+    app.get('/api/metrics', (c) => {
+        return c.json(metrics.snapshot());
+    });
 
     // Identity is behind /api/ auth — exposes persona and principles
     app.get('/api/identity', (c) => c.json(IDENTITY));
@@ -285,6 +326,48 @@ export function createServer(container: AppContainer) {
 
     app.get('/api/sessions', (c) => {
         return c.json({ sessions: [] });
+    });
+
+    // Conversation export — markdown or JSON format
+    app.get('/api/export', (c) => {
+        const sessionKey = c.req.query('sessionKey');
+        const format = c.req.query('format') || 'markdown'; // markdown | json
+        if (!sessionKey) return c.json({ error: 'Missing sessionKey' }, 400);
+
+        const session = container.sessions.getOrCreateSession(sessionKey, container.config.defaultProvider, 'unknown');
+        const history = container.sessions.getHistory(session.id, 9999);
+
+        if (format === 'json') {
+            return c.json({
+                session: { key: sessionKey, id: session.id },
+                messages: history,
+                exported_at: new Date().toISOString(),
+            });
+        }
+
+        // Markdown format
+        const lines = [
+            `# Conversation Export`,
+            `**Session:** ${sessionKey}`,
+            `**Exported:** ${new Date().toISOString()}`,
+            `**Messages:** ${history.length}`,
+            '',
+            '---',
+            '',
+        ];
+
+        for (const msg of history) {
+            const time = new Date(msg.createdAt).toLocaleString();
+            const roleName = msg.role === 'user' ? 'User' : msg.role === 'assistant' ? 'Tombot' : 'Tool';
+            lines.push(`### ${roleName} (${time})`);
+            lines.push('');
+            lines.push(msg.content || '_[empty]_');
+            lines.push('');
+        }
+
+        c.header('Content-Type', 'text/markdown; charset=utf-8');
+        c.header('Content-Disposition', `attachment; filename="conversation-${sessionKey.replace(/[^a-zA-Z0-9]/g, '-')}.md"`);
+        return c.body(lines.join('\n'));
     });
 
     // Expose audit log instance for other modules
