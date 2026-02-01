@@ -87,16 +87,35 @@ export class MindStore {
             CREATE INDEX IF NOT EXISTS idx_mind_learnings_approved ON mind_learnings(approved);
         `);
 
+        // Migration: add session_key column for multi-user mind separation
+        try {
+            this.db.exec(`ALTER TABLE mind_log ADD COLUMN session_key TEXT NOT NULL DEFAULT ''`);
+            this.db.exec(`CREATE INDEX IF NOT EXISTS idx_mind_log_session ON mind_log(session_key)`);
+            logger.info('[MindStore] Migrated: added session_key column to mind_log');
+        } catch {
+            // Column already exists — ignore
+        }
+
+        // Migration: add rejected_titles for dream rejection memory
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS mind_rejected_learnings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                rejected_at INTEGER NOT NULL
+            );
+        `);
+
         logger.info('[MindStore] Initialized SQLite tables');
     }
 
     // ── Log operations ───────────────────────────────────────────────
 
-    addLog(category: MindLogCategory, payload: Record<string, unknown>): number {
+    addLog(category: MindLogCategory, payload: Record<string, unknown>, sessionKey?: string): number {
         const now = Date.now();
         const result = this.db.prepare(
-            'INSERT INTO mind_log (category, payload, created_at) VALUES (?, ?, ?)'
-        ).run(category, JSON.stringify(payload), now);
+            'INSERT INTO mind_log (category, payload, created_at, session_key) VALUES (?, ?, ?, ?)'
+        ).run(category, JSON.stringify(payload), now, sessionKey || '');
         return result.lastInsertRowid as number;
     }
 
@@ -147,7 +166,22 @@ export class MindStore {
     }
 
     rejectLearning(id: number): void {
+        // Save to rejection memory before deleting — prevents re-proposal in future dreams
+        const learning = this.db.prepare('SELECT title, content FROM mind_learnings WHERE id = ?').get(id) as any;
+        if (learning) {
+            this.db.prepare(
+                'INSERT INTO mind_rejected_learnings (title, content, rejected_at) VALUES (?, ?, ?)'
+            ).run(learning.title, learning.content, Date.now());
+        }
         this.db.prepare('DELETE FROM mind_learnings WHERE id = ?').run(id);
+    }
+
+    /** Get previously rejected learning titles to avoid re-proposal */
+    getRejectedTitles(): string[] {
+        const rows = this.db.prepare(
+            'SELECT title FROM mind_rejected_learnings ORDER BY rejected_at DESC LIMIT 100'
+        ).all() as any[];
+        return rows.map(r => r.title);
     }
 
     getApprovedLearnings(): MindLearning[] {
@@ -240,6 +274,12 @@ export class MindStore {
             }).join('\n\n');
 
             sections.push(`## ${cat.charAt(0).toUpperCase() + cat.slice(1)} Signals (${logs.length})\n${entries}`);
+        }
+
+        // Include rejected learning titles so the LLM avoids re-proposing them
+        const rejected = this.getRejectedTitles();
+        if (rejected.length > 0) {
+            sections.push(`## Previously Rejected Learnings (DO NOT re-propose)\n${rejected.map(t => `- ${t}`).join('\n')}`);
         }
 
         return sections.join('\n\n');

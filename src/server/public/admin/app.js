@@ -168,6 +168,11 @@ const API = {
         return res.json();
     },
 
+    async getMetrics() {
+        const res = await Utils.fetchWithAuth(`${CONFIG.API_BASE}/metrics`);
+        return res.json();
+    },
+
     async getChatHistory(sessionKey) {
         const res = await Utils.fetchWithAuth(`${CONFIG.API_BASE}/messages?sessionKey=${sessionKey}`);
         return res.json();
@@ -246,6 +251,20 @@ const UI = {
                 ${e.ip ? `<span class="audit-entry__ip">${e.ip}</span>` : ''}
             </div>`;
         }).join('');
+    },
+
+    renderMetrics(data) {
+        const set = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+        const counters = data.counters || {};
+        const histograms = data.histograms || {};
+        set('metric-agent-runs', counters['agent.runs'] || 0);
+        set('metric-agent-errors', counters['agent.errors'] || 0);
+        set('metric-tool-calls', counters['tools.calls'] || 0);
+        const runMs = histograms['agent.run_ms'];
+        set('metric-avg-run', runMs ? Math.round(runMs.avg) : '--');
     },
 
     renderIdentity(identity) {
@@ -566,11 +585,12 @@ const App = {
             const identity = await API.getIdentity();
             UI.renderIdentity(identity);
 
-            // Load usage stats & daily cost & audit
+            // Load usage stats & daily cost & audit & metrics
             await Promise.all([
                 App.updateUsage(),
                 App.updateDailyCost(),
                 App.updateAuditLog(),
+                App.updateMetrics(),
             ]);
 
             // Hide auth overlay
@@ -605,6 +625,15 @@ const App = {
         }
     },
 
+    async updateMetrics() {
+        try {
+            const data = await API.getMetrics();
+            UI.renderMetrics(data);
+        } catch (err) {
+            console.error('Metrics fetch error:', err);
+        }
+    },
+
     async updateAuditLog() {
         try {
             const entries = await API.getAuditLog(30);
@@ -622,6 +651,7 @@ const App = {
         State.updateInterval = setInterval(() => {
             App.updateUsage();
             App.updateDailyCost();
+            App.updateMetrics();
         }, CONFIG.UPDATE_INTERVAL);
     },
 
@@ -635,6 +665,10 @@ const App = {
         permLevel?.addEventListener('change', e => {
             UI.updatePermissionBadge(parseInt(e.target.value));
         });
+
+        // Metrics refresh
+        const refreshMetricsBtn = document.getElementById('refresh-metrics-btn');
+        refreshMetricsBtn?.addEventListener('click', App.updateMetrics);
 
         // Audit log refresh
         const refreshAuditBtn = document.getElementById('refresh-audit-btn');

@@ -116,6 +116,45 @@
                     </div>
                 </div>
 
+                <!-- Metrics & Observability -->
+                <div class="col-12">
+                    <div class="section-header">
+                        <h2 class="section-header__title">
+                            <span class="section-header__icon">📊</span>
+                            Metrics
+                        </h2>
+                        <button type="button" class="btn btn--outline btn--sm" id="refresh-metrics-btn">Refresh</button>
+                    </div>
+                    <div class="card">
+                        <div class="dashboard-grid">
+                            <div class="col-3">
+                                <div class="stat">
+                                    <span class="stat__label">Agent Runs</span>
+                                    <span class="stat__value" id="metric-agent-runs">0</span>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="stat">
+                                    <span class="stat__label">Errors</span>
+                                    <span class="stat__value" id="metric-agent-errors">0</span>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="stat">
+                                    <span class="stat__label">Tool Calls</span>
+                                    <span class="stat__value" id="metric-tool-calls">0</span>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="stat">
+                                    <span class="stat__label">Avg Run (ms)</span>
+                                    <span class="stat__value" id="metric-avg-run">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- System Identity -->
                 <div class="col-12">
                     <div class="section-header">
@@ -172,6 +211,37 @@
                                 <option value="false">Disabled</option>
                             </select>
                             <p class="form-hint">Dream phase, stress logging, tactical learnings with decay</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mind System Controls -->
+                <div class="col-12">
+                    <div class="section-header">
+                        <h2 class="section-header__title">
+                            <span class="section-header__icon">🧬</span>
+                            Mind System
+                        </h2>
+                    </div>
+                    <div class="card">
+                        <div class="dashboard-grid">
+                            <div class="col-6">
+                                <div class="stat">
+                                    <span class="stat__label">Approved Learnings</span>
+                                    <span class="stat__value" id="mind-approved-count">--</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="stat">
+                                    <span class="stat__label">Pending Review</span>
+                                    <span class="stat__value" id="mind-pending-count">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-top: 1rem;">
+                            <label class="form-label">Auto-Dream Schedule</label>
+                            <input type="text" class="form-control" id="dream-cron" placeholder="0 3 * * *" disabled>
+                            <p class="form-hint">Configured via DREAM_CRON env var</p>
                         </div>
                     </div>
                 </div>

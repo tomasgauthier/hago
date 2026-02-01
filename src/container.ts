@@ -27,6 +27,7 @@ import { createServer } from './server/app.js';
 import { MemoryStore } from './memory/store.js';
 import { MemoryIndex } from './memory/index.js';
 import { CronScheduler } from './cron/scheduler.js';
+import { loadConfig } from './config/load.js';
 import { logger } from './utils/logger.js';
 import { serve } from '@hono/node-server';
 import { PermissionManager } from './utils/permissions.js';
@@ -35,6 +36,9 @@ import { BrowserManager, createBrowserTools } from './agent/tools/builtin/browse
 import { createFileSystemTools } from './agent/tools/builtin/filesystem.js';
 import { createSelfModTools } from './agent/tools/builtin/selfmod.js';
 import { createMemoryTools } from './agent/tools/builtin/memory.js';
+import { loadPlugins } from './plugins/loader.js';
+import { Cron } from 'croner';
+import * as path from 'path';
 
 export interface AppContainer {
     sessions: SessionStore;
@@ -133,6 +137,7 @@ export function createContainer(config: AppConfig): AppContainer {
         defaultProviderId: config.defaultProvider,
         memory: config.memory.enabled ? memory : null,
         mindStore: config.spiritualBiology?.enabled ? mindStore : null,
+        toolRegistry: tools,
     });
 
     // Multi-agent router
@@ -160,7 +165,11 @@ export function createContainer(config: AppConfig): AppContainer {
     }
 
     if (config.channels.whatsapp?.enabled) {
-        channels.registerChannel(new WhatsAppChannel(config.dataDir, config.channels.whatsapp.phoneNumber));
+        channels.registerChannel(new WhatsAppChannel(
+            config.dataDir,
+            config.channels.whatsapp.phoneNumber,
+            config.channels.whatsapp.authorizedJids || []
+        ));
     }
 
     const cron = new CronScheduler({ dataDir: config.dataDir });
@@ -210,8 +219,41 @@ export function createContainer(config: AppConfig): AppContainer {
     tools.register(telegramGetMediaInfoTool);
     logger.info('Telegram tools registered (5 tools)');
 
+    // Load external plugins from plugins/ directory
+    const pluginDir = path.join(config.dataDir, 'plugins');
+    loadPlugins(pluginDir, tools, { dataDir: config.dataDir, db: sessions.db }).then(count => {
+        if (count > 0) logger.info(`Loaded ${count} plugin tools from ${pluginDir}`);
+    }).catch(err => {
+        logger.warn(`Plugin loading failed: ${err.message}`);
+    });
+
     const app = createServer({ sessions, agent, channels, config, tools, memory, cron } as any);
     let serverHandle: any;
+
+    // Auto-schedule dream phase (nightly at 3 AM) if spiritual biology is enabled
+    if (config.spiritualBiology?.enabled) {
+        const dreamCronPattern = process.env.DREAM_CRON || '0 3 * * *'; // Default: 3 AM daily
+        // Use croner directly since scheduleFixed expects a CronJob with sessionKey
+        new Cron(dreamCronPattern, async () => {
+            const logCount = mindStore.getLogCount(7);
+            if (logCount < 3) {
+                logger.info('[Mind] Auto-dream skipped — fewer than 3 logs in past 7 days');
+                return;
+            }
+
+            logger.info(`[Mind] Auto-dream triggered (${logCount} logs in past 7 days)`);
+            try {
+                const dreamTool = tools.getTool('dream');
+                if (dreamTool) {
+                    await tools.execute('dream', { days: 7 });
+                    logger.info('[Mind] Auto-dream completed');
+                }
+            } catch (err: any) {
+                logger.error(`[Mind] Auto-dream failed: ${err.message}`);
+            }
+        });
+        logger.info(`[Mind] Dream auto-scheduling enabled: ${dreamCronPattern}`);
+    }
 
     const start = async () => {
         logger.info('Tombot starting...');
@@ -257,6 +299,26 @@ export function createContainer(config: AppConfig): AppContainer {
     };
 
     (global as any).container = container;
+
+    // Config hot-reload via SIGHUP — reloads config without restart
+    process.on('SIGHUP', () => {
+        try {
+            const newConfig = loadConfig();
+            Object.assign(container.config, newConfig);
+
+            // Hot-reload channel configs
+            if (newConfig.channels.telegram) {
+                container.channels.updateChannelConfig('telegram', newConfig.channels.telegram);
+            }
+            if (newConfig.channels.whatsapp) {
+                container.channels.updateChannelConfig('whatsapp', newConfig.channels.whatsapp);
+            }
+
+            logger.info('Configuration reloaded via SIGHUP');
+        } catch (err: any) {
+            logger.error(`Config hot-reload failed: ${err.message}`);
+        }
+    });
 
     return container;
 }

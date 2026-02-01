@@ -18,9 +18,15 @@ export function setMindStore(store: MindStore): void {
 function refreshLearningsCache(): void {
     if (!mindStoreRef) return;
     try {
+        // Activate all approved learnings on cache refresh (tracks usage frequency)
+        const approved = mindStoreRef.getApprovedLearnings();
+        for (const learning of approved) {
+            mindStoreRef.activateLearning(learning.id);
+        }
+
         learningsCache = mindStoreRef.formatApprovedLearnings();
         learningsCacheTime = Date.now();
-        logger.info(`[Identity] Refreshed learnings cache (${learningsCache.length} chars)`);
+        logger.info(`[Identity] Refreshed learnings cache (${approved.length} learnings, ${learningsCache.length} chars)`);
     } catch (err: any) {
         logger.warn(`[Identity] Failed to refresh learnings cache: ${err.message}`);
     }
@@ -38,7 +44,7 @@ function getApprovedLearnings(): string {
 
 export const IDENTITY = {
     name: "Tombot",
-    version: "2.2.0",
+    version: "2.3.0",
     persona: `You are Tombot, an agentic AI assistant designed for high-performance operations, personal productivity, and system automation.
 You are professional, precise, and proactive. You don't just answer questions; you help solve problems and improve the user's workflow.`,
 

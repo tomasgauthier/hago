@@ -213,11 +213,13 @@ The bot records four types of signals into a SQLite log:
 | `log_ethical_refusal` | Bot refuses a harmful request | Domain, summary, reasoning |
 | `log_guidance` | User gives meta-advice | Topic, advice, context |
 
-Stress signals are also auto-detected from message patterns (e.g. "no, that's wrong", "I already told you") and logged automatically by the runner, even if the bot itself doesn't invoke the tool.
+Stress signals are also auto-detected from message patterns (e.g. "no, that's wrong", "I already told you") and logged automatically by the runner, even if the bot itself doesn't invoke the tool. When an embedding provider is available, semantic stress detection supplements the regex patterns — user messages are compared against reference frustration phrases using cosine similarity (threshold: 0.75).
 
-**During dreams (manual trigger):**
+**During dreams (manual or automatic):**
 
-When you tell the bot to `dream`, the following happens:
+Dreams can be triggered manually by telling the bot to `dream`, or automatically via a cron schedule (default: 3 AM daily, configurable via `DREAM_CRON` env var). Auto-dreams only fire when there are at least 3 log entries in the past 7 days.
+
+When a dream is triggered, the following happens:
 
 1. **Decay** — Every existing learning's relevance score is multiplied by 0.95. This is the "forgetting curve." Learnings that are never reactivated fade over time.
 
@@ -273,6 +275,7 @@ All mind data lives in the same SQLite database as everything else:
 | `mind_log` | Stress, confession, ethics, and guidance entries with timestamps |
 | `mind_learnings` | Tactical learnings with `relevance_score`, `activation_count`, `last_activated`, `approved` |
 | `mind_dreams` | Record of each dream phase (days analyzed, log count, proposals) |
+| `mind_rejected_learnings` | Titles/content of rejected learnings to prevent re-proposal |
 
 Previous versions used markdown files in a `.mind/` directory. SQLite is better because writes are atomic (no partial corruption), data is queryable, and decay is a single `UPDATE` statement instead of a file rewrite.
 
@@ -289,6 +292,10 @@ The mind system has explicit protections against self-corruption:
 4. **Prompt sanitization** — Dream prompts are built from log entries that contain user text. Before sending to the LLM, injection patterns are stripped (`ignore previous instructions`, `<system>` tags, `you are now`, etc.).
 
 5. **Human-in-the-loop** — No learning is applied without explicit user approval. The bot proposes; you decide.
+
+6. **Rejection memory** — When a learning is rejected, its title and content are saved to `mind_rejected_learnings`. Future dream phases include these titles with an explicit "DO NOT re-propose" instruction, preventing the system from suggesting the same ideas repeatedly.
+
+7. **Multi-user isolation** — The `mind_log` table includes a `session_key` column, allowing mind signals to be tracked per-user in multi-user deployments.
 
 ## Configuration Reference
 
@@ -314,7 +321,10 @@ The mind system has explicit protections against self-corruption:
             enabled: true,
             authorizedUsers: [123456789],  // Telegram user IDs
         },
-        whatsapp: { enabled: false },
+        whatsapp: {
+            enabled: false,
+            authorizedJids: ['123456789@s.whatsapp.net'],
+        },
     },
 
     tools: { enabled: true },
@@ -342,6 +352,16 @@ The mind system has explicit protections against self-corruption:
         enabled: false,
         vaultPath: '/path/to/vault',
     },
+
+    // Multi-model routing (optional)
+    routing: {
+        enabled: false,
+        routes: [
+            { provider: 'claude-default', patterns: ['code', 'programming'] },
+        ],
+        cheapProvider: 'gemini-flash',        // Route short/simple messages here
+        complexityThreshold: 100,             // Char count below which cheapProvider is used
+    },
 }
 ```
 
@@ -360,7 +380,36 @@ The mind system has explicit protections against self-corruption:
 | `SESSION_TOKEN_BUDGET` | No | `500000` | Max tokens per request |
 | `TRUST_PROXY` | No | `false` | Set `true` if behind a reverse proxy to trust X-Forwarded-For |
 | `BRAVE_SEARCH_API_KEY` | No | — | For `web_search` tool |
+| `MAX_CONTEXT_TOKENS` | No | `100000` | Max estimated tokens in conversation history before truncation |
+| `DREAM_CRON` | No | `0 3 * * *` | Cron pattern for automatic dream phase scheduling |
+| `WHISPER_API_URL` | No | OpenAI default | Custom Whisper API endpoint for voice transcription |
+| `TELEGRAM_ENHANCED` | No | `false` | Set `true` for streaming responses + rich Telegram features |
 | `DATA_DIR` | No | `./data` | Database and data directory |
+
+## Plugin System
+
+Tombot supports external plugins loaded from `<dataDir>/plugins/`. Each plugin is a `.js` or `.ts` file that exports a `register` function returning an array of tool definitions.
+
+```typescript
+// plugins/hello.ts
+import { z } from 'zod';
+export function register(ctx) {
+    return [{
+        name: 'hello',
+        description: 'Say hello',
+        parameters: z.object({ name: z.string() }),
+        execute: async ({ name }) => `Hello, ${name}!`,
+    }];
+}
+```
+
+Plugins receive a `PluginContext` with `dataDir` and `db` (the SQLite database instance).
+
+## Observability
+
+- **Metrics endpoint** — `GET /api/metrics` returns counters (`agent.runs`, `agent.errors`, `tools.calls`, `rag.failures`), histograms (`agent.run_ms`), and uptime
+- **Health endpoint** — `GET /health` returns DB status, provider count, memory/mind/channel state, and uptime
+- **Conversation export** — `GET /api/export?sessionKey=...&format=markdown|json` exports full conversation history
 
 ## Admin Dashboard
 
@@ -374,6 +423,9 @@ Access at `http://localhost:<port>/admin`. Features:
 - **Advanced** — self-modification, browser, filesystem toggles
 - **Audit Log** — real-time viewer of security events with refresh
 - **Chat Console** — talk to the bot directly from the dashboard (streaming)
+- **Metrics** — real-time agent run count, error rate, tool calls, and RAG failures
+- **Mind Controls** — view pending/approved learnings count, trigger dream phase, configure auto-dream schedule
+- **Conversation Export** — download conversation history as markdown or JSON
 
 ## Tools (30+)
 
