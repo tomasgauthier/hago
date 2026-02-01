@@ -2,15 +2,18 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { LLMProvider, LLMMessage, StreamEvent } from './types.js';
 import { AppError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
+import { withRetry } from '../../utils/retry.js';
 
 export class GeminiProvider implements LLMProvider {
     private genAI: GoogleGenerativeAI;
     public id: string;
-    private modelName: string;
+    public model: string;
+    private embeddingModel: string;
 
-    constructor(config: { id: string; apiKey: string; model: string }) {
+    constructor(config: { id: string; apiKey: string; model: string; embeddingModel?: string }) {
         this.id = config.id;
-        this.modelName = config.model;
+        this.model = config.model;
+        this.embeddingModel = config.embeddingModel || 'text-embedding-004';
         this.genAI = new GoogleGenerativeAI(config.apiKey);
     }
 
@@ -21,7 +24,7 @@ export class GeminiProvider implements LLMProvider {
     }): AsyncGenerator<StreamEvent> {
         try {
             const model = this.genAI.getGenerativeModel({
-                model: this.modelName,
+                model: this.model,
                 systemInstruction: params.systemPrompt,
                 tools: params.tools ? [{ functionDeclarations: params.tools }] : undefined,
             });
@@ -134,9 +137,12 @@ export class GeminiProvider implements LLMProvider {
                 validated.shift();
             }
 
-            const result = await model.generateContentStream({
-                contents: validated,
-            });
+            const result = await withRetry(
+                () => model.generateContentStream({ contents: validated }),
+                { label: `Gemini/${this.model}` },
+            );
+
+            let toolCallsEmitted = false;
 
             for await (const chunk of result.stream) {
                 const calls = chunk.functionCalls();
@@ -149,7 +155,8 @@ export class GeminiProvider implements LLMProvider {
                             args: c.args
                         }))
                     };
-                    return;
+                    toolCallsEmitted = true;
+                    continue;
                 }
 
                 const chunkText = chunk.text();
@@ -158,7 +165,7 @@ export class GeminiProvider implements LLMProvider {
                 }
             }
 
-            // Extract usage at the end
+            // Always yield done with usage — including after tool calls
             const response = await result.response;
             const usage = response.usageMetadata;
 
@@ -179,8 +186,11 @@ export class GeminiProvider implements LLMProvider {
 
     async getEmbedding(text: string): Promise<number[]> {
         try {
-            const model = this.genAI.getGenerativeModel({ model: 'text-embedding-004' });
-            const result = await model.embedContent(text);
+            const model = this.genAI.getGenerativeModel({ model: this.embeddingModel });
+            const result = await withRetry(
+                () => model.embedContent(text),
+                { label: `GeminiEmbed/${this.embeddingModel}` },
+            );
             return result.embedding.values;
         } catch (err: any) {
             logger.error(`Gemini embedding error: ${err.message}`);

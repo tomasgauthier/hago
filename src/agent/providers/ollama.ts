@@ -6,7 +6,7 @@ import { logger } from '../../utils/logger.js';
 export class OllamaProvider implements LLMProvider {
     private client: Ollama;
     public id: string;
-    private model: string;
+    public model: string;
 
     constructor(config: { id: string; model: string; baseUrl?: string }) {
         this.id = config.id;

@@ -7,6 +7,7 @@ export const ProviderSchema = z.object({
     googleApiKey: z.string().optional(),
     model: z.string(),
     baseUrl: z.string().optional(),
+    embeddingModel: z.string().optional(),
 });
 
 export const ToolSchema = z.object({

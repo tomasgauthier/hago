@@ -28,6 +28,7 @@ export interface StreamEvent {
 /** Core chat completion interface — all providers must implement this */
 export interface ChatProvider {
     id: string;
+    model: string;
     stream(params: {
         systemPrompt: string;
         messages: LLMMessage[];

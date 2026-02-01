@@ -113,7 +113,7 @@ export class AgentRunner {
             return;
         }
 
-        const session = this.sessions.getOrCreateSession(input.sessionKey, provider.id, 'gemini-1.5-flash');
+        const session = this.sessions.getOrCreateSession(input.sessionKey, provider.id, provider.model);
         const history = this.sessions.getHistory(session.id);
         this.sessions.addMessage(session.id, 'user', input.text);
 
