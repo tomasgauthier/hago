@@ -51,5 +51,6 @@ config.json5.bak
 config.json5.backup.*
 config.json5.before-restore.*
 
-# Plugins directory (user-installed plugins)
-plugins/
+# Plugins directory (user-installed plugins, inside data/)
+# Note: src/plugins/ is source code and should NOT be ignored
+data/plugins/
