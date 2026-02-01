@@ -53,9 +53,13 @@ function getDailyCost(container: AppContainer): number {
 }
 
 function getClientIp(c: any): string {
-    return c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-        || c.req.header('x-real-ip')
-        || '127.0.0.1';
+    // Only trust proxy headers if TRUST_PROXY is set (e.g. behind nginx/cloudflare)
+    if (process.env.TRUST_PROXY === 'true') {
+        return c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+            || c.req.header('x-real-ip')
+            || '127.0.0.1';
+    }
+    return '127.0.0.1';
 }
 
 export function createServer(container: AppContainer) {
@@ -63,7 +67,10 @@ export function createServer(container: AppContainer) {
     const audit = new AuditLog(container.sessions.db);
 
     app.use('*', honoLogger());
-    app.use('*', cors());
+    app.use('*', cors({
+        origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+        credentials: true,
+    }));
 
     // ── Security headers ─────────────────────────────────────────────
     app.use('*', async (c, next) => {
@@ -123,7 +130,16 @@ export function createServer(container: AppContainer) {
         const body = await c.req.json().catch(() => ({}));
         const { password } = body as { password?: string };
 
-        if (!password || password !== adminPassword) {
+        const passwordValid = password && (() => {
+            try {
+                const a = Buffer.from(String(password));
+                const b = Buffer.from(adminPassword);
+                if (a.length !== b.length) return false;
+                const { timingSafeEqual } = require('node:crypto');
+                return timingSafeEqual(a, b);
+            } catch { return false; }
+        })();
+        if (!passwordValid) {
             const ip = getClientIp(c);
             audit.log({
                 action: 'auth_failure',

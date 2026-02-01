@@ -233,6 +233,7 @@ export function createBrowserTools(
         // Block dangerous JS patterns that could exfiltrate data or hijack sessions
         const BLOCKED_JS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
           { pattern: /\bfetch\s*\(/i, reason: 'fetch() calls (network exfiltration)' },
+          { pattern: /\.fetch\s*\(/i, reason: 'fetch() calls via property access (network exfiltration)' },
           { pattern: /XMLHttpRequest/i, reason: 'XMLHttpRequest (network exfiltration)' },
           { pattern: /\.sendBeacon\s*\(/i, reason: 'sendBeacon() (network exfiltration)' },
           { pattern: /new\s+WebSocket/i, reason: 'WebSocket (network exfiltration)' },

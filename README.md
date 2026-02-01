@@ -143,12 +143,17 @@ A 4-level tiered system controls what the agent can do:
 | Attack vector | Mitigation |
 |---|---|
 | **Shell command injection** | Pipes, backticks, `$()`, chaining operators, and redirection are blocked |
-| **Path traversal** | Directory boundary checks use proper prefix matching (not naive `startsWith`) |
-| **Browser JS execution** | `browser_evaluate` requires `PRIVILEGED` level; blocks `fetch()`, `eval()`, `document.cookie`, `XMLHttpRequest`, and 10+ other dangerous patterns |
+| **Shell env var leak** | Child processes receive only an allowlist of safe env vars (PATH, HOME, NODE_ENV, etc.) — no API keys or secrets leak to spawned commands |
+| **Path traversal** | `normalizePath()` uses `path.resolve()` to collapse `../` sequences before boundary checks; backup restore validates filename pattern |
+| **Browser JS execution** | `browser_evaluate` requires `PRIVILEGED` level; blocks `fetch()`, `.fetch()`, `eval()`, `document.cookie`, `XMLHttpRequest`, and 10+ other dangerous patterns |
 | **Dream prompt injection** | User text in `.mind/` logs is sanitized before LLM injection — strips `ignore previous instructions`, `<system>` tags, etc. |
-| **Config injection** | All config updates validated against Zod schema before applying |
+| **Config injection** | All config updates validated against Zod schema; `config_update` tool restricted to an allowlist of safe top-level keys; `setNestedValue` blocks `__proto__`/`constructor`/`prototype` to prevent prototype pollution |
 | **Identity exposure** | `/api/identity` moved behind auth (was public at `/identity`) |
 | **Rate limiting** | In-memory per-IP rate limiter (30 req/min) on all routes |
+| **CORS** | Restricted to localhost origins only; `TRUST_PROXY` env var controls whether proxy headers are trusted for IP resolution |
+| **Timing-safe auth** | Both HMAC token validation and raw password comparison on `/auth/token` use `timingSafeEqual` to prevent timing attacks |
+| **Channel authorization** | Telegram validates `authorizedUsers` IDs; WhatsApp validates `authorizedJids` — unauthorized messages are dropped |
+| **Tool argument validation** | `JSON.parse` of LLM-provided tool arguments is wrapped in try-catch to prevent crashes from malformed JSON |
 | **Daily cost ceiling** | Configurable via `DAILY_COST_CEILING` env var; blocks all LLM calls when exceeded |
 | **Audit logging** | All auth failures, shell executions, config changes, and privileged operations logged to SQLite |
 | **Security headers** | `X-Content-Type-Options`, `X-Frame-Options: DENY`, CSP, Referrer-Policy, Permissions-Policy |
@@ -353,6 +358,7 @@ The mind system has explicit protections against self-corruption:
 | `SERVER_PORT` | No | `3000` | HTTP port |
 | `DAILY_COST_CEILING` | No | `5.00` | Max daily spend in USD |
 | `SESSION_TOKEN_BUDGET` | No | `500000` | Max tokens per request |
+| `TRUST_PROXY` | No | `false` | Set `true` if behind a reverse proxy to trust X-Forwarded-For |
 | `BRAVE_SEARCH_API_KEY` | No | — | For `web_search` tool |
 | `DATA_DIR` | No | `./data` | Database and data directory |
 

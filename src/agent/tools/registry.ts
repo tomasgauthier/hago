@@ -74,7 +74,16 @@ export class ToolRegistry {
         const tool = this.getTool(name);
         if (!tool) throw new Error(`Tool ${name} not found`);
 
-        const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+        let parsedArgs: any;
+        if (typeof args === 'string') {
+            try {
+                parsedArgs = JSON.parse(args);
+            } catch {
+                throw new Error(`Invalid JSON in tool arguments for ${name}: ${args.slice(0, 200)}`);
+            }
+        } else {
+            parsedArgs = args;
+        }
         const validatedArgs = tool.parameters.parse(parsedArgs);
 
         const rawResult = await tool.execute(validatedArgs, context);

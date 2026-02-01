@@ -18,10 +18,12 @@ export class WhatsAppChannel implements Channel {
     private handler?: (msg: InboundMessage) => void;
     private dataDir: string;
     private phoneNumber?: string;
+    private authorizedJids: string[];
 
-    constructor(dataDir: string, phoneNumber?: string) {
+    constructor(dataDir: string, phoneNumber?: string, authorizedJids: string[] = []) {
         this.dataDir = path.join(dataDir, 'whatsapp-auth');
         this.phoneNumber = phoneNumber;
+        this.authorizedJids = authorizedJids;
     }
 
     onMessage(handler: (msg: InboundMessage) => void) {
@@ -31,6 +33,10 @@ export class WhatsAppChannel implements Channel {
     updateConfig(config: any) {
         if (config.phoneNumber) {
             this.phoneNumber = config.phoneNumber;
+        }
+        if (config.authorizedJids) {
+            this.authorizedJids = config.authorizedJids;
+            logger.info(`WhatsApp authorized JIDs updated: ${this.authorizedJids.length} entries`);
         }
     }
 
@@ -96,6 +102,11 @@ export class WhatsAppChannel implements Channel {
             if (m.type === 'notify') {
                 for (const msg of m.messages) {
                     if (!msg.key.fromMe && msg.message?.conversation) {
+                        const remoteJid = msg.key.remoteJid;
+                        if (this.authorizedJids.length > 0 && remoteJid && !this.authorizedJids.includes(remoteJid)) {
+                            logger.warn(`Unauthorized WhatsApp message from: ${remoteJid}`);
+                            continue;
+                        }
                         if (this.handler) {
                             this.handler({
                                 id: msg.key.id!,

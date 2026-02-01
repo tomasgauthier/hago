@@ -200,13 +200,17 @@ export const shellExecuteTool = {
         }
 
         return new Promise((resolve, reject) => {
-            // Strip sensitive env vars from the child process environment
-            const safeEnv = { ...process.env };
-            const sensitiveKeys = Object.keys(safeEnv).filter(k =>
-                /API_KEY|TOKEN|SECRET|PASSWORD|ENCRYPTION_KEY/i.test(k)
-            );
-            for (const key of sensitiveKeys) {
-                delete safeEnv[key];
+            // Allowlist: only pass safe env vars to the child process
+            const ENV_ALLOWLIST = [
+                'PATH', 'HOME', 'USER', 'SHELL', 'LANG', 'LC_ALL', 'LC_CTYPE',
+                'TERM', 'COLORTERM', 'EDITOR', 'VISUAL',
+                'NODE_ENV', 'NODE_PATH', 'NPM_CONFIG_PREFIX',
+                'TMPDIR', 'TMP', 'TEMP',
+                'SystemRoot', 'WINDIR', 'COMSPEC', 'ProgramFiles',
+            ];
+            const safeEnv: Record<string, string> = {};
+            for (const key of ENV_ALLOWLIST) {
+                if (process.env[key]) safeEnv[key] = process.env[key]!;
             }
 
             const child = spawn(shell, [...shellArgs, command], {
