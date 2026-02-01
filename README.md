@@ -1,4 +1,4 @@
-# Tombot v2 — Personal AI Assistant
+# Tombot v3 — Personal AI Assistant
 
 Tombot is an agentic AI assistant built from scratch for personal productivity, system automation, and multi-channel communication. It connects to multiple LLM providers (Gemini, Claude, OpenAI, Ollama), exposes 30+ tools, and includes a self-reflective "mind" system that learns from its own mistakes.
 
