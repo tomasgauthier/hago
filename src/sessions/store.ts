@@ -85,11 +85,8 @@ export class SessionStore {
     }
 
     recordUsage(sessionId: number, providerId: string, model: string, inputTokens: number, outputTokens: number) {
-        // Very simple cost calculation (e.g., Gemini 1.5 Flash $0.075 / 1M tokens)
-        let rate = 0.000000075; // Per token (roughly $0.075 / 1M)
-        if (model.includes('pro')) rate = 0.00000125; // ($1.25 / 1M)
-
-        const cost = (inputTokens + outputTokens) * rate;
+        const { inputRate, outputRate } = getCostRates(model);
+        const cost = (inputTokens * inputRate) + (outputTokens * outputRate);
         const now = Date.now();
 
         this.db.prepare(
@@ -175,4 +172,44 @@ export class SessionStore {
     close() {
         this.db.close();
     }
+}
+
+/** Per-token cost rates (USD) for known models. Rates are per token (not per 1M). */
+function getCostRates(model: string): { inputRate: number; outputRate: number } {
+    const m = model.toLowerCase();
+
+    // Anthropic Claude
+    if (m.includes('claude-3-5-sonnet') || m.includes('claude-3.5-sonnet'))
+        return { inputRate: 3.0 / 1e6, outputRate: 15.0 / 1e6 };
+    if (m.includes('claude-3-5-haiku') || m.includes('claude-3.5-haiku'))
+        return { inputRate: 0.8 / 1e6, outputRate: 4.0 / 1e6 };
+    if (m.includes('claude-3-opus') || m.includes('claude-3.0-opus'))
+        return { inputRate: 15.0 / 1e6, outputRate: 75.0 / 1e6 };
+    if (m.includes('claude'))
+        return { inputRate: 3.0 / 1e6, outputRate: 15.0 / 1e6 };
+
+    // Google Gemini
+    if (m.includes('gemini-2.0-flash') || m.includes('gemini-2.5-flash'))
+        return { inputRate: 0.075 / 1e6, outputRate: 0.30 / 1e6 };
+    if (m.includes('gemini-1.5-flash') || m.includes('gemini-flash'))
+        return { inputRate: 0.075 / 1e6, outputRate: 0.30 / 1e6 };
+    if (m.includes('gemini-1.5-pro') || m.includes('gemini-pro'))
+        return { inputRate: 1.25 / 1e6, outputRate: 5.0 / 1e6 };
+
+    // OpenAI
+    if (m.includes('gpt-4o-mini'))
+        return { inputRate: 0.15 / 1e6, outputRate: 0.60 / 1e6 };
+    if (m.includes('gpt-4o'))
+        return { inputRate: 2.5 / 1e6, outputRate: 10.0 / 1e6 };
+    if (m.includes('gpt-4-turbo') || m.includes('gpt-4'))
+        return { inputRate: 10.0 / 1e6, outputRate: 30.0 / 1e6 };
+    if (m.includes('gpt-3.5'))
+        return { inputRate: 0.5 / 1e6, outputRate: 1.5 / 1e6 };
+
+    // Ollama / local — free
+    if (m.includes('llama') || m.includes('mistral') || m.includes('phi') || m.includes('qwen'))
+        return { inputRate: 0, outputRate: 0 };
+
+    // Unknown — conservative Gemini Flash rate as fallback
+    return { inputRate: 0.075 / 1e6, outputRate: 0.30 / 1e6 };
 }

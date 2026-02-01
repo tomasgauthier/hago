@@ -108,12 +108,21 @@ export function createContainer(config: AppConfig): AppContainer {
     // Providers
     const providers: LLMProvider[] = config.providers.map(p => {
         switch (p.type) {
-            case 'claude':
-                return new ClaudeProvider({ id: p.id, apiKey: p.apiKey!, model: p.model });
-            case 'gemini':
-                return new GeminiProvider({ id: p.id, apiKey: p.googleApiKey!, model: p.model });
-            case 'openai':
-                return new OpenAIProvider({ id: p.id, apiKey: p.apiKey!, model: p.model, baseUrl: p.baseUrl });
+            case 'claude': {
+                const apiKey = p.apiKey || process.env.ANTHROPIC_API_KEY;
+                if (!apiKey) throw new Error(`Provider "${p.id}": missing apiKey (set in config or ANTHROPIC_API_KEY env)`);
+                return new ClaudeProvider({ id: p.id, apiKey, model: p.model });
+            }
+            case 'gemini': {
+                const apiKey = p.googleApiKey || process.env.GOOGLE_API_KEY;
+                if (!apiKey) throw new Error(`Provider "${p.id}": missing googleApiKey (set in config or GOOGLE_API_KEY env)`);
+                return new GeminiProvider({ id: p.id, apiKey, model: p.model, embeddingModel: p.embeddingModel });
+            }
+            case 'openai': {
+                const apiKey = p.apiKey || process.env.OPENAI_API_KEY;
+                if (!apiKey) throw new Error(`Provider "${p.id}": missing apiKey (set in config or OPENAI_API_KEY env)`);
+                return new OpenAIProvider({ id: p.id, apiKey, model: p.model, baseUrl: p.baseUrl, embeddingModel: p.embeddingModel });
+            }
             case 'ollama':
                 return new OllamaProvider({ id: p.id, model: p.model, baseUrl: p.baseUrl });
             default:
