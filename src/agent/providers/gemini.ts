@@ -82,28 +82,56 @@ export class GeminiProvider implements LLMProvider {
                 });
             }
 
-            // Validate Gemini ordering: function response must follow function call
+            // Validate and fix Gemini ordering constraints:
+            // 1. function response must immediately follow a function call
+            // 2. No two consecutive turns with the same role (merge them)
+            // 3. First turn must be 'user', not 'model' or 'function'
             const validated: any[] = [];
+
             for (let i = 0; i < contents.length; i++) {
                 const c = contents[i];
                 const hasFnCall = c.parts?.some((p: any) => p.functionCall);
+                const isFnResponse = c.role === 'function';
+
                 if (hasFnCall) {
+                    // Look ahead for matching function response
                     const next = contents[i + 1];
                     if (!next || next.role !== 'function') {
-                        // Skip orphaned function call turn (no matching response)
-                        logger.warn('Skipping orphaned function call turn in history (no function response follows)');
+                        logger.warn('Skipping orphaned function call turn (no function response follows)');
                         continue;
                     }
+                    // Push both call and response together
+                    validated.push(c);
+                    validated.push(next);
+                    i++; // Skip the response since we already pushed it
+                    continue;
                 }
-                if (c.role === 'function') {
+
+                if (isFnResponse) {
+                    // Should have been consumed by the function call handler above
                     const prev = validated[validated.length - 1];
                     if (!prev || !prev.parts?.some((p: any) => p.functionCall)) {
-                        // Skip orphaned function response (no preceding function call)
-                        logger.warn('Skipping orphaned function response in history (no function call precedes)');
+                        logger.warn('Skipping orphaned function response (no function call precedes)');
                         continue;
                     }
+                    validated.push(c);
+                    continue;
                 }
+
+                // Merge consecutive same-role turns (e.g. two 'user' messages)
+                const prev = validated[validated.length - 1];
+                if (prev && prev.role === c.role) {
+                    prev.parts.push(...c.parts);
+                    continue;
+                }
+
                 validated.push(c);
+            }
+
+            // Ensure first turn is 'user' — strip leading model turns from history
+            while (validated.length > 0 && validated[0].role !== 'user') {
+                logger.warn(`Stripping leading ${validated[0].role} turn — Gemini requires user first`);
+                validated.shift();
             }
 
             const result = await model.generateContentStream({
