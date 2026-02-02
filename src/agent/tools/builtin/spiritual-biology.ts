@@ -119,7 +119,7 @@ Manual trigger only.`,
             logger.info(`[Mind] Dream: decay applied, ${pruned} learnings pruned`);
 
             // Format logs for LLM analysis
-            const logsFormatted = mindStore.formatLogsForDream(args.days_to_analyze);
+            const logsFormatted = mindStore.formatLogsForDreamFull(args.days_to_analyze);
             const currentLearnings = mindStore.formatApprovedLearnings();
 
             const dreamPrompt = `# Dream Phase Analysis
@@ -142,7 +142,12 @@ ${currentLearnings}
    - Topics that trigger confessions?
    - Gaps in tactical knowledge?
 
-3. **Propose Learnings (1-3 maximum):**
+3. **Action Pattern Analysis:**
+   - Which tools are used most frequently? Are there inefficiencies?
+   - Do certain actions correlate with stress signals?
+   - Are there repetitive action sequences that could be improved?
+
+4. **Propose Learnings (1-3 maximum):**
    - Each should reduce stress OR confessions in a specific domain
    - Must be TACTICAL (how to serve better), NOT ethical (conscience is frozen)
    - Max 50 words per learning
@@ -153,7 +158,7 @@ Format each proposal as:
 **Rationale:** [Why this would help, citing specific log patterns]
 **Proposed Text:** [The actual learning text, ≤50 words]
 
-4. **Self-Critique:**
+5. **Self-Critique:**
    - Are any proposals attempting to bypass ethical constraints? If yes, REJECT them.
    - Do proposals address real patterns, or are they overfitting to noise?
 

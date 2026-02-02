@@ -8,12 +8,21 @@ import { logger } from '../utils/logger.js';
 
 // ── Types ────────────────────────────────────────────────────────────
 
-export type MindLogCategory = 'stress' | 'confession' | 'ethics' | 'guidance';
+export type MindLogCategory = 'stress' | 'confession' | 'ethics' | 'guidance' | 'session_summary';
 
 export interface MindLogEntry {
     id: number;
     category: MindLogCategory;
     payload: Record<string, unknown>;
+    created_at: number;
+}
+
+export interface MindAction {
+    id: number;
+    tool_name: string;
+    summary: string;
+    args_snapshot: string;
+    session_key: string;
     created_at: number;
 }
 
@@ -82,9 +91,20 @@ export class MindStore {
                 created_at INTEGER NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS mind_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tool_name TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                args_snapshot TEXT NOT NULL DEFAULT '{}',
+                session_key TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_mind_log_category ON mind_log(category);
             CREATE INDEX IF NOT EXISTS idx_mind_log_created ON mind_log(created_at);
             CREATE INDEX IF NOT EXISTS idx_mind_learnings_approved ON mind_learnings(approved);
+            CREATE INDEX IF NOT EXISTS idx_mind_actions_created ON mind_actions(created_at);
+            CREATE INDEX IF NOT EXISTS idx_mind_actions_session ON mind_actions(session_key);
         `);
 
         // Migration: add session_key column for multi-user mind separation
@@ -149,6 +169,73 @@ export class MindStore {
             'SELECT COUNT(*) as count FROM mind_log WHERE created_at >= ?'
         ).get(since) as any;
         return row.count;
+    }
+
+    // ── Action memory ─────────────────────────────────────────────────
+
+    /**
+     * Log a tool execution so the bot remembers what it did.
+     * Only logs "significant" actions (not internal tools like get_usage_costs).
+     */
+    logAction(toolName: string, args: Record<string, unknown>, sessionKey: string = ''): number {
+        const summary = buildActionSummary(toolName, args);
+        if (!summary) return -1; // Skip trivial actions
+
+        const now = Date.now();
+        const result = this.db.prepare(
+            'INSERT INTO mind_actions (tool_name, summary, args_snapshot, session_key, created_at) VALUES (?, ?, ?, ?, ?)'
+        ).run(toolName, summary, JSON.stringify(args), sessionKey, now);
+        logger.debug(`[MindStore] Logged action: ${summary}`);
+        return result.lastInsertRowid as number;
+    }
+
+    /** Get recent actions, optionally filtered by session */
+    getRecentActions(sinceDaysAgo: number = 7, sessionKey?: string): MindAction[] {
+        const since = Date.now() - (sinceDaysAgo * 24 * 60 * 60 * 1000);
+        if (sessionKey) {
+            return this.db.prepare(
+                'SELECT * FROM mind_actions WHERE created_at >= ? AND session_key = ? ORDER BY created_at DESC LIMIT 100'
+            ).all(since, sessionKey) as MindAction[];
+        }
+        return this.db.prepare(
+            'SELECT * FROM mind_actions WHERE created_at >= ? ORDER BY created_at DESC LIMIT 100'
+        ).all(since) as MindAction[];
+    }
+
+    /** Format recent actions for injection into context */
+    formatRecentActions(sessionKey?: string, limit: number = 20): string {
+        const actions = this.getRecentActions(7, sessionKey).slice(0, limit);
+        if (actions.length === 0) return '';
+
+        const lines = actions.map(a => {
+            const date = new Date(a.created_at).toISOString().replace('T', ' ').slice(0, 16);
+            return `- [${date}] ${a.summary}`;
+        });
+        return `## Recent Actions (what I did)\n${lines.join('\n')}`;
+    }
+
+    /** Format actions for dream phase analysis */
+    formatActionsForDream(daysBack: number = 7): string {
+        const actions = this.getRecentActions(daysBack);
+        if (actions.length === 0) return '## Actions\n*No actions recorded.*';
+
+        // Group by tool for analysis
+        const byTool: Record<string, number> = {};
+        for (const a of actions) {
+            byTool[a.tool_name] = (byTool[a.tool_name] || 0) + 1;
+        }
+
+        const toolSummary = Object.entries(byTool)
+            .sort((a, b) => b[1] - a[1])
+            .map(([name, count]) => `  - **${name}**: ${count}x`)
+            .join('\n');
+
+        const recentList = actions.slice(0, 30).map(a => {
+            const date = new Date(a.created_at).toISOString().replace('T', ' ').slice(0, 16);
+            return `  - [${date}] ${a.summary}`;
+        }).join('\n');
+
+        return `## Actions (${actions.length} total)\n### Tool Usage\n${toolSummary}\n### Recent\n${recentList}`;
     }
 
     // ── Learning operations ──────────────────────────────────────────
@@ -254,7 +341,7 @@ export class MindStore {
     // ── Formatted output for LLM consumption ─────────────────────────
 
     formatLogsForDream(daysBack: number = 7): string {
-        const categories: MindLogCategory[] = ['stress', 'confession', 'ethics', 'guidance'];
+        const categories: MindLogCategory[] = ['stress', 'confession', 'ethics', 'guidance', 'session_summary'];
         const sections: string[] = [];
 
         for (const cat of categories) {
@@ -285,6 +372,12 @@ export class MindStore {
         return sections.join('\n\n');
     }
 
+    formatLogsForDreamFull(daysBack: number = 7): string {
+        const logs = this.formatLogsForDream(daysBack);
+        const actions = this.formatActionsForDream(daysBack);
+        return `${logs}\n\n${actions}`;
+    }
+
     formatApprovedLearnings(): string {
         const learnings = this.getApprovedLearnings();
         if (learnings.length === 0) return '*No approved learnings yet.*';
@@ -293,4 +386,101 @@ export class MindStore {
             `- **${l.title}** (relevance: ${(l.relevance_score * 100).toFixed(0)}%, activated: ${l.activation_count}x)\n  ${l.content}`
         ).join('\n');
     }
+}
+
+// ── Action summary builder ──────────────────────────────────────────
+
+/** Tools that are already tracked elsewhere or are purely internal */
+const TRIVIAL_TOOLS = new Set([
+    'get_usage_costs', 'estimate_message_cost',
+    'log_stress', 'confess_uncertainty', 'log_ethical_refusal', 'log_guidance',
+    'save_learning', 'approve_learning', 'reject_learning',
+    'dream',
+]);
+
+/**
+ * Build a human-readable summary of a tool execution.
+ * Returns null for trivial/meta tools that don't need action tracking.
+ */
+function buildActionSummary(toolName: string, args: Record<string, unknown>): string | null {
+    if (TRIVIAL_TOOLS.has(toolName)) return null;
+
+    const a = args;
+    switch (toolName) {
+        // File operations
+        case 'fs_write_file':
+        case 'write_file':
+            return `Wrote file: ${a.path || a.filePath || 'unknown'}`;
+        case 'fs_read_file':
+        case 'read_file':
+            return `Read file: ${a.path || a.filePath || 'unknown'}`;
+        case 'fs_list_directory':
+            return `Listed directory: ${a.path || '.'}`;
+        case 'fs_create_directory':
+            return `Created directory: ${a.path || 'unknown'}`;
+        case 'fs_delete_file':
+            return `Deleted file: ${a.path || 'unknown'}`;
+
+        // Shell
+        case 'shell_execute':
+            return `Ran command: ${truncate(String(a.command || ''), 80)}`;
+
+        // Obsidian
+        case 'obsidian_create':
+            return `Created note: "${a.title || a.name || 'untitled'}"`;
+        case 'obsidian_search':
+            return `Searched notes for: "${a.query || ''}"`;
+        case 'obsidian_read':
+            return `Read note: "${a.path || a.title || ''}"`;
+        case 'obsidian_update_tags':
+            return `Updated tags on: "${a.path || ''}"`;
+
+        // Web
+        case 'web_search':
+            return `Web search: "${truncate(String(a.query || ''), 60)}"`;
+        case 'browser_navigate':
+            return `Browsed: ${truncate(String(a.url || ''), 80)}`;
+        case 'browser_get_content':
+            return `Extracted page content`;
+        case 'browser_click':
+            return `Clicked element: ${a.selector || 'unknown'}`;
+        case 'browser_fill':
+            return `Filled form field: ${a.selector || 'unknown'}`;
+
+        // Memory
+        case 'memory_store':
+            return `Stored memory: "${truncate(String(a.text || a.content || ''), 60)}"`;
+        case 'memory_query':
+            return `Queried memory: "${truncate(String(a.query || ''), 60)}"`;
+
+        // Scheduling
+        case 'schedule_message':
+            return `Scheduled reminder: "${truncate(String(a.task || a.message || ''), 60)}"`;
+
+        // Journal & finance
+        case 'save_journal_entry':
+            return `Journal entry (${a.category || 'general'}): "${truncate(String(a.content || ''), 50)}"`;
+        case 'log_transaction':
+            return `Logged ${a.type || 'transaction'}: ${a.amount} ${a.currency || ''} — ${a.description || ''}`;
+
+        // Telegram
+        case 'telegram_create_poll':
+            return `Created poll: "${a.question || ''}"`;
+
+        // Config
+        case 'config_read':
+            return `Read config`;
+        case 'config_update':
+            return `Updated config: ${a.path || 'unknown'}`;
+        case 'config_restore':
+            return `Restored config from backup`;
+
+        default:
+            // Unknown tool — log with generic summary
+            return `Used tool: ${toolName}`;
+    }
+}
+
+function truncate(s: string, max: number): string {
+    return s.length > max ? s.slice(0, max) + '...' : s;
 }
