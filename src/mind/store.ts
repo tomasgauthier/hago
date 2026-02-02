@@ -8,7 +8,7 @@ import { logger } from '../utils/logger.js';
 
 // ── Types ────────────────────────────────────────────────────────────
 
-export type MindLogCategory = 'stress' | 'confession' | 'ethics' | 'guidance';
+export type MindLogCategory = 'stress' | 'confession' | 'ethics' | 'guidance' | 'session_summary';
 
 export interface MindLogEntry {
     id: number;
@@ -341,7 +341,7 @@ export class MindStore {
     // ── Formatted output for LLM consumption ─────────────────────────
 
     formatLogsForDream(daysBack: number = 7): string {
-        const categories: MindLogCategory[] = ['stress', 'confession', 'ethics', 'guidance'];
+        const categories: MindLogCategory[] = ['stress', 'confession', 'ethics', 'guidance', 'session_summary'];
         const sections: string[] = [];
 
         for (const cat of categories) {

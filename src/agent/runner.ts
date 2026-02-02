@@ -142,7 +142,7 @@ export class AgentRunner {
             }
         }
 
-        const systemPrompt = await getSystemPrompt();
+        const systemPrompt = await getSystemPrompt(input.sessionKey);
         const toolRegistry = this.toolRegistry;
         const tools = toolRegistry?.getAllDefinitions();
         logger.info(`Agent starting run. Available tools: ${tools?.length || 0}`);
@@ -155,9 +155,9 @@ export class AgentRunner {
         }));
         messages.push({ role: 'user', content: input.text });
 
-        // Token-aware history truncation — estimate ~4 chars/token, trim oldest messages
+        // Token-aware history compaction — summarize before truncating
         const MAX_CONTEXT_TOKENS = Number(process.env.MAX_CONTEXT_TOKENS) || 100_000;
-        messages = AgentRunner.truncateHistory(messages, MAX_CONTEXT_TOKENS);
+        messages = await this.compactHistory(messages, MAX_CONTEXT_TOKENS, provider, input.sessionKey);
 
         // RAG: augment context with relevant memories (graceful degradation — never blocks the response)
         if (this.memory) {
@@ -273,6 +273,13 @@ export class AgentRunner {
                                 messages.push({ role: 'tool', content: resultStr, toolCallId: call.name });
                                 this.sessions.addMessage(session.id, 'tool', resultStr, call.name);
                                 logger.info(`Tool ${call.name} result: ${resultStr}`);
+
+                                // Log action to mind store for action memory
+                                if (this.mindStore) {
+                                    try {
+                                        this.mindStore.logAction(call.name, call.args as Record<string, unknown>, input.sessionKey);
+                                    } catch { /* non-critical */ }
+                                }
                             } catch (err: any) {
                                 const errorMsg = `Tool Error: ${err.message}`;
                                 logger.error(`Tool execution failed: ${errorMsg}`);
@@ -309,6 +316,79 @@ export class AgentRunner {
             metrics.observe('agent.run_ms', performance.now() - runStart);
             yield { type: 'error', error: err.message };
         }
+    }
+
+    /**
+     * Compact history: when over 80% of token budget, summarize dropped messages
+     * via the LLM and store the summary in mind_log as session_summary.
+     */
+    private async compactHistory(
+        messages: LLMMessage[],
+        maxTokens: number,
+        provider: LLMProvider,
+        sessionKey: string,
+    ): Promise<LLMMessage[]> {
+        const totalTokens = messages.reduce((sum, m) => sum + AgentRunner.estimateTokens(m), 0);
+        const threshold = maxTokens * 0.8;
+
+        if (totalTokens <= threshold) return messages;
+
+        // Identify messages to drop (keep first 2 + last message)
+        const keep = 2;
+        const toDrop: LLMMessage[] = [];
+        let trimmed = [...messages];
+        let currentTokens = totalTokens;
+
+        while (currentTokens > threshold && trimmed.length > keep + 1) {
+            const removed = trimmed.splice(keep, 1)[0];
+            toDrop.push(removed);
+            currentTokens -= AgentRunner.estimateTokens(removed);
+        }
+
+        if (toDrop.length === 0) return messages;
+
+        // Summarize dropped messages via LLM
+        let summary = '';
+        try {
+            const summaryText = toDrop
+                .map(m => `[${m.role}]: ${(m.content || '').slice(0, 500)}`)
+                .join('\n');
+
+            const summaryPrompt = 'Summarize this conversation segment in 2-3 sentences, capturing key topics, decisions, and actions taken:';
+            let collected = '';
+            for await (const event of provider.stream({
+                systemPrompt: summaryPrompt,
+                messages: [{ role: 'user', content: summaryText.slice(0, 8000) }],
+            })) {
+                if (event.type === 'text' && event.content) {
+                    collected += event.content;
+                }
+            }
+            summary = collected.trim();
+        } catch (err: any) {
+            logger.warn(`[Compaction] LLM summary failed, using fallback: ${err.message}`);
+            summary = `[${toDrop.length} earlier messages were compacted]`;
+        }
+
+        // Store summary in mind system
+        if (this.mindStore && summary) {
+            try {
+                this.mindStore.addLog('session_summary', {
+                    summary,
+                    messages_compacted: toDrop.length,
+                    session_key: sessionKey,
+                }, sessionKey);
+            } catch { /* non-critical */ }
+        }
+
+        // Inject synthetic summary message after the kept prefix
+        trimmed.splice(keep, 0, {
+            role: 'user',
+            content: `[Previous conversation summary]: ${summary}`,
+        });
+
+        logger.info(`[Compaction] Compacted ${toDrop.length} messages into summary (~${totalTokens - currentTokens} tokens freed)`);
+        return trimmed;
     }
 
     /** Estimate token count for a message (~4 chars per token) */

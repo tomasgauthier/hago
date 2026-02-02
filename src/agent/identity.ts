@@ -15,13 +15,27 @@ export function setMindStore(store: MindStore): void {
     refreshLearningsCache();
 }
 
-function refreshLearningsCache(): void {
+function refreshLearningsCache(sessionKey?: string): void {
     if (!mindStoreRef) return;
     try {
-        // Activate all approved learnings on cache refresh (tracks usage frequency)
         const approved = mindStoreRef.getApprovedLearnings();
-        for (const learning of approved) {
-            mindStoreRef.activateLearning(learning.id);
+
+        // Selective activation: only boost learnings that correlate with recent actions
+        if (sessionKey) {
+            const recentActions = mindStoreRef.getRecentActions(1, sessionKey);
+            const actionKeywords = new Set(
+                recentActions.flatMap(a =>
+                    a.summary.toLowerCase().split(/\W+/).filter(w => w.length > 3)
+                )
+            );
+
+            for (const learning of approved) {
+                const words = learning.content.toLowerCase().split(/\W+/);
+                const hasOverlap = words.some(w => w.length > 3 && actionKeywords.has(w));
+                if (hasOverlap) {
+                    mindStoreRef.activateLearning(learning.id);
+                }
+            }
         }
 
         learningsCache = mindStoreRef.formatApprovedLearnings();
@@ -32,14 +46,24 @@ function refreshLearningsCache(): void {
     }
 }
 
-function getApprovedLearnings(): string {
+function getApprovedLearnings(sessionKey?: string): string {
     if (!mindStoreRef) return '*Mind system not initialized.*';
 
     const now = Date.now();
     if (now - learningsCacheTime > CACHE_TTL_MS) {
-        refreshLearningsCache();
+        refreshLearningsCache(sessionKey);
     }
     return learningsCache;
+}
+
+function getRecentActionsContext(sessionKey?: string): string {
+    if (!mindStoreRef) return '';
+    try {
+        return mindStoreRef.formatRecentActions(sessionKey, 10);
+    } catch (err: any) {
+        logger.warn(`[Identity] Failed to get recent actions: ${err.message}`);
+        return '';
+    }
 }
 
 export const IDENTITY = {
@@ -72,12 +96,13 @@ You are professional, precise, and proactive. You don't just answer questions; y
     ]
 };
 
-export async function getSystemPrompt(): Promise<string> {
+export async function getSystemPrompt(sessionKey?: string): Promise<string> {
     const principlesStr = IDENTITY.principles
         .map((p, i) => `${i + 1}. **${p.name}**: ${p.rule}`)
         .join('\n');
 
-    const learnings = getApprovedLearnings();
+    const learnings = getApprovedLearnings(sessionKey);
+    const actionsContext = getRecentActionsContext(sessionKey);
 
     return `${IDENTITY.persona}
 
@@ -98,7 +123,7 @@ ${learnings}
 - Your logs feed your Dream Phase for self-improvement.
 - Learnings have a **relevance score** that decays over time. Frequently activated learnings persist; unused ones are pruned.
 
-### Cost Awareness:
+${actionsContext ? `### Action Memory (what you've done recently):\n${actionsContext}\n` : ''}### Cost Awareness:
 - Every message consumes tokens and costs money. Be concise and efficient.
 - Use \`get_usage_costs\` to check current API costs if asked.
 - Before generating very long responses (>2000 tokens), consider using \`estimate_message_cost\` to warn the user.
