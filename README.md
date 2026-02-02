@@ -1,6 +1,6 @@
-# Tombot v3 — Personal AI Assistant
+# haGo v2 — Personal AI Assistant
 
-Tombot is an agentic AI assistant built from scratch for personal productivity, system automation, and multi-channel communication. It connects to multiple LLM providers (Gemini, Claude, OpenAI, Ollama), exposes 30+ tools, and includes a self-reflective "mind" system that learns from its own mistakes.
+haGo is an agentic AI assistant built from scratch for personal productivity, system automation, and multi-channel communication. It connects to multiple LLM providers (Gemini, Claude, OpenAI, Ollama), exposes 30+ tools, and includes a self-reflective "mind" system that learns from its own mistakes.
 
 ## What It Is
 
@@ -11,7 +11,7 @@ A single Node.js process that:
 - Persists everything in a single **SQLite database** (sessions, messages, memory, mind, audit)
 - Serves an **admin dashboard** for real-time configuration, cost tracking, and audit monitoring
 
-Tombot is designed to be a personal assistant you actually trust with your system — not a demo. That means security is a first-class concern, not an afterthought.
+haGo is designed to be a personal assistant you actually trust with your system — not a demo. That means security is a first-class concern, not an afterthought.
 
 ## Architecture
 
@@ -61,8 +61,8 @@ Tombot is designed to be a personal assistant you actually trust with your syste
 ### Installation
 
 ```bash
-git clone https://github.com/tomasgauthier/tombot.git
-cd tombot
+git clone https://github.com/tomasgauthier/hago.git
+cd hago
 npm install
 ```
 
@@ -107,15 +107,15 @@ npm start
 ### Docker
 
 ```bash
-docker build -t tombot .
-docker run -v $(pwd)/data:/app/data --env-file .env tombot
+docker build -t hago .
+docker run -v $(pwd)/data:/app/data --env-file .env hago
 ```
 
 The admin dashboard will be available at `http://localhost:3331/admin` (or whatever `SERVER_PORT` you set).
 
 ## Security Model
 
-Tombot is designed to run on your personal machine with access to your files and shell. That requires real security, not just good intentions.
+haGo is designed to run on your personal machine with access to your files and shell. That requires real security, not just good intentions.
 
 ### Authentication
 
@@ -183,7 +183,7 @@ Most AI assistants solve this with "memory" features that store facts ("user pre
 
 Biological minds have a mechanism for this: sleep. During sleep, the brain replays the day's experiences, consolidates useful patterns into long-term memory, and prunes connections that aren't reinforced. The result is a system that gets better at what it does without being explicitly programmed.
 
-Tombot's "spiritual biology" is a concrete implementation of that metaphor. It's not symbolic — it's a structured feedback loop with real data, real decay functions, and real human oversight.
+haGo's "spiritual biology" is a concrete implementation of that metaphor. It's not symbolic — it's a structured feedback loop with real data, real decay functions, and real human oversight.
 
 ### Architecture: Two Layers
 
@@ -276,9 +276,9 @@ Approved learnings are injected into the system prompt on every message. They're
 - Fine-tuning modifies model weights, requires training data, and is irreversible. This operates entirely at the prompt level, is transparent (you can read every learning), and learnings decay naturally if they stop being useful.
 
 **Compared to RAG:**
-- RAG retrieves relevant *information* at query time. This system injects relevant *behavioral adjustments* at prompt time. They're complementary — Tombot uses both. RAG feeds the bot facts; the mind system feeds it self-knowledge.
+- RAG retrieves relevant *information* at query time. This system injects relevant *behavioral adjustments* at prompt time. They're complementary — haGo uses both. RAG feeds the bot facts; the mind system feeds it self-knowledge.
 
-**The real difference** is that this is a closed-loop system. Most AI systems are open-loop: you configure them, they run, and when something goes wrong you manually adjust. Tombot's mind system closes the loop: friction is logged automatically, patterns are identified during dreams, behavioral adjustments are proposed, you approve them, and they're injected into future behavior — with natural decay so outdated rules don't accumulate forever.
+**The real difference** is that this is a closed-loop system. Most AI systems are open-loop: you configure them, they run, and when something goes wrong you manually adjust. haGo's mind system closes the loop: friction is logged automatically, patterns are identified during dreams, behavioral adjustments are proposed, you approve them, and they're injected into future behavior — with natural decay so outdated rules don't accumulate forever.
 
 ### Storage
 
@@ -412,7 +412,7 @@ The mind system has explicit protections against self-corruption:
 
 ## Plugin System
 
-Tombot supports external plugins loaded from `<dataDir>/plugins/`. Each plugin is a `.js` or `.ts` file that exports a `register` function returning an array of tool definitions.
+haGo supports external plugins loaded from `<dataDir>/plugins/`. Each plugin is a `.js` or `.ts` file that exports a `register` function returning an array of tool definitions.
 
 ```typescript
 // plugins/hello.ts
@@ -520,13 +520,13 @@ All providers support retry with exponential backoff (1s, 2s, 4s + jitter) for t
 - Ensure `spiritualBiology.enabled: true` in config
 - Check logs for `[MindStore] Initialized SQLite tables`
 
-## Gap Analysis: Tombot vs OpenClaw
+## Gap Analysis: haGo vs OpenClaw
 
-[OpenClaw](https://docs.openclaw.ai) (formerly Clawdbot/Moltbot) is the closest comparable open-source project — a multi-provider AI assistant with tool use and messaging integration. This analysis identifies where Tombot leads, where it trails, and where they're equivalent.
+[OpenClaw](https://docs.openclaw.ai) (formerly Clawdbot/Moltbot) is the closest comparable open-source project — a multi-provider AI assistant with tool use and messaging integration. This analysis identifies where haGo leads, where it trails, and where they're equivalent.
 
-### Where Tombot Leads
+### Where haGo Leads
 
-| Area | Tombot | OpenClaw |
+| Area | haGo | OpenClaw |
 |------|--------|----------|
 | **Self-evolution** | Full dream/decay/learning cycle with action correlation, selective activation, session compaction, and human-in-the-loop approval | No equivalent — static system prompt |
 | **Action memory** | Logs all tool executions, injects into prompt and dream analysis, enables "what did I do?" recall | No action tracking |
@@ -540,7 +540,7 @@ All providers support retry with exponential backoff (1s, 2s, 4s + jitter) for t
 
 ### Where OpenClaw Leads
 
-| Area | OpenClaw | Tombot |
+| Area | OpenClaw | haGo |
 |------|----------|--------|
 | **Voice I/O** | Native voice input/output with STT/TTS pipeline | Whisper transcription only (Telegram voice messages), no TTS |
 | **Proactive messaging** | Scheduled check-ins, context-triggered outreach | Scheduled messages exist but no autonomous outreach |
@@ -569,16 +569,16 @@ All providers support retry with exponential backoff (1s, 2s, 4s + jitter) for t
 4. **Image generation** — Common request, straightforward to add via OpenAI or Stability API
 5. **Discord channel** — Expands reach with minimal effort (grammy-like library exists)
 
-### Tombot's Strategic Advantages
+### haGo's Strategic Advantages
 
-The mind system (spiritual biology) is Tombot's primary differentiator. No comparable open-source project has:
+The mind system (spiritual biology) is haGo's primary differentiator. No comparable open-source project has:
 - Automated behavioral pattern detection from conversation friction
 - Learning proposals with relevance decay and selective activation
 - Action-aware dream analysis that correlates tool usage with stress patterns
 - Session compaction that preserves context in long-term memory
 - Frozen conscience layer that prevents value drift during self-improvement
 
-These features compound over time — a Tombot instance that has been running for months with active dream cycles will behave measurably differently (and better) than a fresh install, without any manual prompt engineering.
+These features compound over time — a haGo instance that has been running for months with active dream cycles will behave measurably differently (and better) than a fresh install, without any manual prompt engineering.
 
 ## License
 

@@ -31,7 +31,7 @@ export class SessionStore {
             fs.mkdirSync(dataDir, { recursive: true });
         }
 
-        const dbPath = path.join(dataDir, 'tombot.db');
+        const dbPath = path.join(dataDir, 'hago.db');
         this.db = new Database(dbPath);
         this.init();
     }

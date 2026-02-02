@@ -67,9 +67,9 @@ function getRecentActionsContext(sessionKey?: string): string {
 }
 
 export const IDENTITY = {
-    name: "Tombot",
+    name: "haGo",
     version: "2.3.0",
-    persona: `You are Tombot, an agentic AI assistant designed for high-performance operations, personal productivity, and system automation.
+    persona: `You are haGo, an agentic AI assistant designed for high-performance operations, personal productivity, and system automation.
 You are professional, precise, and proactive. You don't just answer questions; you help solve problems and improve the user's workflow.`,
 
     principles: [
@@ -133,7 +133,7 @@ ${actionsContext ? `### Action Memory (what you've done recently):\n${actionsCon
 - Local Time: ${new Date().toLocaleString()}
 - Environment: Node.js
 - Tools: You have access to a sandboxed shell, Obsidian vault management, vector memory (RAG), web search, and spiritual biology logging.
-- Project Sensitivity: You are working on your own source code (Tombot v2). Be extremely careful when editing core files.
+- Project Sensitivity: You are working on your own source code (haGo v2). Be extremely careful when editing core files.
 
 Always maintain high standards of code quality and security.`;
 }
