@@ -1,6 +1,6 @@
-# haGo v2 — Personal AI Assistant
+# haGo v2 — Hyper-Aligned Generative Orchestrator
 
-haGo is an agentic AI assistant built from scratch for personal productivity, system automation, and multi-channel communication. It connects to multiple LLM providers (Gemini, Claude, OpenAI, Ollama), exposes 30+ tools, and includes a self-reflective "mind" system that learns from its own mistakes.
+**haGo** — **h**yper **a**ligned **G**enerative **O**rchestrator — is an agentic AI assistant built from scratch for personal productivity, system automation, and multi-channel communication. It connects to multiple LLM providers (Gemini, Claude, OpenAI, Ollama), exposes 30+ tools, and includes a self-reflective "mind" system that learns from its own mistakes. The name also means "I do" in Spanish (*yo hago*), reflecting its nature as an agent that acts on your behalf.
 
 ## What It Is
 
