@@ -265,7 +265,7 @@ export function createContainer(config: AppConfig): AppContainer {
     }
 
     const start = async () => {
-        logger.info('Tombot starting...');
+        logger.info('haGo starting...');
         if (config.memory.enabled) {
             logger.info('Memory system enabled');
         }
@@ -284,7 +284,7 @@ export function createContainer(config: AppConfig): AppContainer {
     };
 
     const stop = async () => {
-        logger.info('Tombot stopping...');
+        logger.info('haGo stopping...');
         await channels.stop();
         await browserManager.closeAll();
         cron.close();

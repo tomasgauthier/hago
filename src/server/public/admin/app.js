@@ -1,12 +1,12 @@
 /**
- * Tombot Admin Dashboard
+ * haGo Admin Dashboard
  * Modern, maintainable JavaScript following best practices
  */
 
 // === Constants ===
 const CONFIG = {
     API_BASE: '/api',
-    STORAGE_KEY: 'tombot_admin_pass',
+    STORAGE_KEY: 'hago_admin_pass',
     CHAT_SESSION_KEY: 'admin:dashboard',
     UPDATE_INTERVAL: 30000, // 30 seconds
     TOAST_DURATION: 3000,
@@ -724,7 +724,7 @@ if (document.readyState === 'loading') {
 }
 
 // === Export for inline use (if needed) ===
-window.TombotAdmin = {
+window.haGoAdmin = {
     auth: Auth,
     chat: Chat,
     config: ConfigManager,

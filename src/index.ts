@@ -19,7 +19,7 @@ async function main() {
 
         await container.start();
 
-        logger.info('Tombot is now listening on all enabled channels.');
+        logger.info('haGo is now listening on all enabled channels.');
 
         process.on('SIGINT', async () => {
             logger.info('Shutting down...');

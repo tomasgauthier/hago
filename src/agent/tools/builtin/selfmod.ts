@@ -234,7 +234,7 @@ export function createSelfModTools(
 
     {
       name: 'system_info',
-      description: 'Get information about the system Tombot is running on.',
+      description: 'Get information about the system haGo is running on.',
       parameters: z.object({}),
       execute: async () => {
         permissions.checkPermission('system_info', PermissionLevel.READ_ONLY);

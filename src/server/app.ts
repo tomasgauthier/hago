@@ -358,7 +358,7 @@ export function createServer(container: AppContainer) {
 
         for (const msg of history) {
             const time = new Date(msg.createdAt).toLocaleString();
-            const roleName = msg.role === 'user' ? 'User' : msg.role === 'assistant' ? 'Tombot' : 'Tool';
+            const roleName = msg.role === 'user' ? 'User' : msg.role === 'assistant' ? 'haGo' : 'Tool';
             lines.push(`### ${roleName} (${time})`);
             lines.push('');
             lines.push(msg.content || '_[empty]_');
