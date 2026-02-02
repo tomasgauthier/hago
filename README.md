@@ -1,4 +1,4 @@
-# haGo v2 — Hyper-Aligned Generative Orchestrator
+# haGo v2 (beta) — Hyper-Aligned Generative Orchestrator
 
 **haGo** — **h**yper **a**ligned **G**enerative **O**rchestrator — is an agentic AI assistant built from inspiration, and in response to Openclaw, for personal productivity, system automation, and multi-channel communication. It connects to multiple LLM providers (Gemini, Claude, OpenAI, Ollama), exposes 30+ tools, and includes a self-reflective "mind" system that learns from its own mistakes. The name also means "I do" in Spanish (*yo hago*), reflecting its nature as an agent that acts on your behalf.
 
