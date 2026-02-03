@@ -5,7 +5,7 @@ import { MindStore } from '../../../../mind/store.js';
 import { logger } from '../../../../utils/logger.js';
 import { formatMessage } from './utils/i18n.js';
 import { validateQuizAnswer } from './utils/validation.js';
-import { QuizAttempt, QuizPerformance, LearningPath, LearningModule, QuizQuestion } from './utils/types.js';
+import { QuizPerformance, QuizQuestion } from './utils/types.js';
 
 /**
  * Tool: learning_quiz_answer
@@ -72,16 +72,44 @@ function _checkAnswer(question: QuizQuestion, userAnswer: string): boolean {
     const correctNorm = normalize(correctAnswer);
 
     if (question.type === 'multiple_choice') {
-        // Direct match
+        // Direct match (exact)
         if (userNorm === correctNorm) return true;
 
-        // Check if user answer contains the correct answer
-        if (userNorm.includes(correctNorm)) return true;
-
-        // Check if options array exists and user selected the correct option
+        // Check if user selected by option letter (a, b, c, d) or number (1, 2, 3, 4)
         if (question.options && question.correctOptionId !== undefined) {
             const correctOption = normalize(question.options[question.correctOptionId]);
-            if (userNorm === correctOption || userNorm.includes(correctOption)) {
+
+            // Exact match with full option text
+            if (userNorm === correctOption) return true;
+
+            // User answered with letter (a, b, c, d)
+            const letterIndex = userNorm.charCodeAt(0) - 'a'.charCodeAt(0);
+            if (userNorm.length === 1 && letterIndex >= 0 && letterIndex < question.options.length) {
+                return letterIndex === question.correctOptionId;
+            }
+
+            // User answered with number (1, 2, 3, 4)
+            const numIndex = parseInt(userNorm, 10) - 1;
+            if (!isNaN(numIndex) && numIndex >= 0 && numIndex < question.options.length) {
+                return numIndex === question.correctOptionId;
+            }
+
+            // Check if user's answer starts with correct option (handles "A. answer text")
+            const optionPrefixes = ['a', 'b', 'c', 'd', '1', '2', '3', '4'];
+            for (let i = 0; i < optionPrefixes.length && i < question.options.length; i++) {
+                const prefix = optionPrefixes[i];
+                // Match patterns like "a.", "a)", "a:", "a " at start
+                const prefixPattern = new RegExp(`^${prefix}[.):\\s]`);
+                if (prefixPattern.test(userNorm)) {
+                    const mappedIndex = i < 4 ? i : i - 4; // 'a'-'d' = 0-3, '1'-'4' = 0-3
+                    return mappedIndex === question.correctOptionId;
+                }
+            }
+
+            // Strict word boundary match to avoid false positives
+            // Only match if the correct option appears as complete words
+            const wordBoundaryRegex = new RegExp(`\\b${escapeRegex(correctNorm)}\\b`, 'i');
+            if (wordBoundaryRegex.test(userAnswer)) {
                 return true;
             }
         }
@@ -111,9 +139,20 @@ function _checkAnswer(question: QuizQuestion, userAnswer: string): boolean {
 
         return false;
     } else {
-        // For other types, do fuzzy matching
-        return userNorm === correctNorm || userNorm.includes(correctNorm);
+        // For open-ended types, use word boundary matching instead of substring
+        if (userNorm === correctNorm) return true;
+
+        // Check with word boundaries to avoid false positives
+        const wordBoundaryRegex = new RegExp(`\\b${escapeRegex(correctNorm)}\\b`, 'i');
+        return wordBoundaryRegex.test(userAnswer);
     }
+}
+
+/**
+ * Escape special regex characters in a string
+ */
+function escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -121,9 +160,7 @@ function _checkAnswer(question: QuizQuestion, userAnswer: string): boolean {
  * Counts unique questions answered correctly, not total attempts
  */
 function _getQuizPerformance(deps: QuizAnswerDeps, sessionKey: string, moduleId: number, totalQuestions: number): QuizPerformance {
-    const attempts = deps.sessionStore.db.prepare(
-        'SELECT * FROM quiz_attempts WHERE session_key = ? AND module_id = ?'
-    ).all(sessionKey, moduleId) as QuizAttempt[];
+    const attempts = deps.sessionStore.getQuizAttempts(sessionKey, moduleId);
 
     if (attempts.length === 0) {
         return { score: 0, correctQuestions: 0, totalQuestions, attempts: 0 };
@@ -131,7 +168,7 @@ function _getQuizPerformance(deps: QuizAnswerDeps, sessionKey: string, moduleId:
 
     // Count unique questions that were answered correctly
     const correctQuestionsSet = new Set(
-        attempts.filter((a) => a.is_correct).map((a) => a.question_index)
+        attempts.filter((a) => a.isCorrect).map((a) => a.questionIndex)
     );
     const correctQuestions = correctQuestionsSet.size;
 
@@ -151,31 +188,29 @@ function _getQuizPerformance(deps: QuizAnswerDeps, sessionKey: string, moduleId:
  */
 function _updateQuizPerformance(deps: QuizAnswerDeps, sessionKey: string): void {
     // Get all quiz attempts for this user
-    const allAttempts = deps.sessionStore.db.prepare(
-        'SELECT * FROM quiz_attempts WHERE session_key = ?'
-    ).all(sessionKey) as QuizAttempt[];
+    const allAttempts = deps.sessionStore.getAllQuizAttempts(sessionKey);
 
     if (allAttempts.length === 0) return;
 
     // Calculate overall performance across all modules
-    // Group by module_id to calculate per-module scores, then average
-    const moduleAttempts = new Map<number, QuizAttempt[]>();
+    // Group by moduleId to calculate per-module scores, then average
+    const moduleAttempts = new Map<number, typeof allAttempts>();
     for (const attempt of allAttempts) {
-        if (!moduleAttempts.has(attempt.module_id)) {
-            moduleAttempts.set(attempt.module_id, []);
+        if (!moduleAttempts.has(attempt.moduleId)) {
+            moduleAttempts.set(attempt.moduleId, []);
         }
-        moduleAttempts.get(attempt.module_id)!.push(attempt);
+        moduleAttempts.get(attempt.moduleId)!.push(attempt);
     }
 
     let totalScore = 0;
     let moduleCount = 0;
 
-    for (const [moduleId, attempts] of moduleAttempts) {
+    for (const [, attempts] of moduleAttempts) {
         const correctQuestionsSet = new Set(
-            attempts.filter(a => a.is_correct).map(a => a.question_index)
+            attempts.filter(a => a.isCorrect).map(a => a.questionIndex)
         );
         const uniqueQuestionsSet = new Set(
-            attempts.map(a => a.question_index)
+            attempts.map(a => a.questionIndex)
         );
 
         if (uniqueQuestionsSet.size > 0) {
@@ -186,22 +221,8 @@ function _updateQuizPerformance(deps: QuizAnswerDeps, sessionKey: string): void 
 
     const avgScore = moduleCount > 0 ? totalScore / moduleCount : 0;
 
-    // Update or create profile
-    const existing = deps.sessionStore.db.prepare(
-        'SELECT * FROM user_learning_profiles WHERE session_key = ?'
-    ).get(sessionKey) as any;
-
-    if (existing) {
-        deps.sessionStore.db.prepare(
-            'UPDATE user_learning_profiles SET quiz_avg_score = ?, last_updated = ? WHERE session_key = ?'
-        ).run(avgScore, Date.now(), sessionKey);
-    } else {
-        deps.sessionStore.db.prepare(`
-            INSERT INTO user_learning_profiles (
-                session_key, quiz_avg_score, last_updated
-            ) VALUES (?, ?, ?)
-        `).run(sessionKey, avgScore, Date.now());
-    }
+    // Update or create profile using repository method
+    deps.sessionStore.upsertLearningProfile(sessionKey, { quizAvgScore: avgScore });
 }
 
 export function createLearningQuizAnswerTool(deps: QuizAnswerDeps): ToolDefinition {
@@ -229,24 +250,20 @@ export function createLearningQuizAnswerTool(deps: QuizAnswerDeps): ToolDefiniti
                 }
                 const sanitizedAnswer = validation.sanitized!;
 
-                // Get module and quiz data
-                const module = deps.sessionStore.db.prepare(
-                    'SELECT * FROM learning_modules WHERE id = ?'
-                ).get(module_id) as LearningModule | undefined;
+                // Get module and quiz data using repository methods
+                const module = deps.sessionStore.getLearningModule(module_id);
 
                 if (!module) {
                     return formatMessage('en', messages, 'error', { error: 'Module not found' });
                 }
 
                 // Get learning path for language
-                const path = deps.sessionStore.db.prepare(
-                    'SELECT * FROM learning_paths WHERE id = ?'
-                ).get(module.learning_path_id) as LearningPath | undefined;
+                const path = deps.sessionStore.getLearningPath(module.learningPathId);
 
                 const language = path?.language || 'en';
 
                 // Parse quiz questions
-                const quizQuestions: QuizQuestion[] = module.quiz_questions ? JSON.parse(module.quiz_questions) : [];
+                const quizQuestions: QuizQuestion[] = module.quizQuestions ? JSON.parse(module.quizQuestions) : [];
 
                 if (question_index < 0 || question_index >= quizQuestions.length) {
                     return formatMessage(language, messages, 'error', { error: 'Question index out of range' });
@@ -255,19 +272,15 @@ export function createLearningQuizAnswerTool(deps: QuizAnswerDeps): ToolDefiniti
                 const question = quizQuestions[question_index];
                 const isCorrect = _checkAnswer(question, sanitizedAnswer);
 
-                // Record attempt
-                deps.sessionStore.db.prepare(`
-                    INSERT INTO quiz_attempts (
-                        session_key, module_id, question_index, user_answer, is_correct, attempted_at
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                `).run(
-                    context.sessionKey,
-                    module_id,
-                    question_index,
-                    sanitizedAnswer,
-                    isCorrect ? 1 : 0,
-                    Date.now()
-                );
+                // Record attempt using repository method
+                deps.sessionStore.addQuizAttempt({
+                    sessionKey: context.sessionKey,
+                    moduleId: module_id,
+                    questionIndex: question_index,
+                    userAnswer: sanitizedAnswer,
+                    isCorrect,
+                    attemptedAt: Date.now()
+                });
 
                 // Update user learning profile
                 _updateQuizPerformance(deps, context.sessionKey);
@@ -314,14 +327,10 @@ export function createLearningQuizAnswerTool(deps: QuizAnswerDeps): ToolDefiniti
                     total: performance.totalQuestions
                 });
 
-                // Check if all questions have been attempted
-                const answeredQuestionsSet = new Set(
-                    deps.sessionStore.db.prepare(
-                        'SELECT DISTINCT question_index FROM quiz_attempts WHERE session_key = ? AND module_id = ?'
-                    ).all(context.sessionKey, module_id).map((row: any) => row.question_index)
-                );
+                // Check if all questions have been attempted using repository method
+                const answeredQuestions = deps.sessionStore.getAnsweredQuestionIndices(context.sessionKey, module_id);
 
-                if (answeredQuestionsSet.size === quizQuestions.length) {
+                if (answeredQuestions.length === quizQuestions.length) {
                     response += '\n\n' + formatMessage(language, messages, 'completed', {
                         score: Math.round(performance.score * 100)
                     });

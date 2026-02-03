@@ -2,15 +2,27 @@
  * Message Chunker Utility
  *
  * Splits long text into chunks suitable for messaging platforms like Telegram/WhatsApp.
- * Telegram limit: 4096 characters
- * WhatsApp limit: ~4096 characters (practical)
+ * Platform-specific limits are configurable.
  */
 
+import { PLATFORM_MESSAGE_LIMITS, PlatformType } from '../agent/tools/builtin/learning/utils/constants.js';
+
 export interface ChunkerOptions {
+    /** Maximum message length (overrides platform default) */
     maxLength?: number;
+    /** Platform type for automatic limit detection */
+    platform?: PlatformType;
     preserveMarkdown?: boolean;
     separator?: string;
     sanitizeMarkdown?: boolean;
+}
+
+/**
+ * Get the message limit for a specific platform
+ */
+export function getPlatformLimit(platform?: PlatformType): number {
+    if (!platform) return PLATFORM_MESSAGE_LIMITS.default;
+    return PLATFORM_MESSAGE_LIMITS[platform] ?? PLATFORM_MESSAGE_LIMITS.default;
 }
 
 /**
@@ -65,13 +77,11 @@ function sanitizeTelegramMarkdown(text: string): string {
     return result;
 }
 
-const DEFAULT_MAX_LENGTH = 3800; // Leave room for markdown and safety margin
-
 /**
  * Split text into chunks, respecting markdown formatting and message limits
  */
 export function chunkMessage(text: string, options: ChunkerOptions = {}): string[] {
-    const maxLength = options.maxLength || DEFAULT_MAX_LENGTH;
+    const maxLength = options.maxLength || getPlatformLimit(options.platform);
     const preserveMarkdown = options.preserveMarkdown ?? true;
     const separator = options.separator || '\n\n';
 
@@ -165,7 +175,12 @@ export function createThread(text: string, options: ChunkerOptions = {}): string
  * Create a thread from structured sections
  * Each section becomes a message in the thread
  */
-export function createStructuredThread(sections: { title?: string; content: string }[], sanitize: boolean = true): string[] {
+export function createStructuredThread(
+    sections: { title?: string; content: string }[],
+    options: { sanitize?: boolean; platform?: PlatformType } = {}
+): string[] {
+    const { sanitize = true, platform } = options;
+    const maxLength = getPlatformLimit(platform);
     const messages: string[] = [];
 
     for (const section of sections) {
@@ -178,7 +193,7 @@ export function createStructuredThread(sections: { title?: string; content: stri
         }
 
         // If this message is too long, chunk it
-        const chunks = chunkMessage(message, { maxLength: DEFAULT_MAX_LENGTH });
+        const chunks = chunkMessage(message, { maxLength, platform });
         messages.push(...chunks);
     }
 

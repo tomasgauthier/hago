@@ -125,3 +125,19 @@ export const LEARNING_TITLES = {
     fr: 'Premiers Principes',
     de: 'Erste Prinzipien'
 } as const;
+
+// Message Chunking Limits per Platform
+export const PLATFORM_MESSAGE_LIMITS = {
+    /** Telegram max message length (4096 chars, use 3800 for safety margin with markdown) */
+    telegram: 3800,
+    /** WhatsApp max message length (practical limit ~4096) */
+    whatsapp: 3800,
+    /** Discord max message length */
+    discord: 1900,
+    /** SMS max message length (for concatenated SMS) */
+    sms: 1500,
+    /** Default fallback limit */
+    default: 3800
+} as const;
+
+export type PlatformType = keyof typeof PLATFORM_MESSAGE_LIMITS;

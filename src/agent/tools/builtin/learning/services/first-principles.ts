@@ -138,16 +138,60 @@ export class FirstPrinciplesService {
 
     /**
      * Strip markdown code fences from LLM JSON responses
+     * Handles edge cases: nested blocks, partial fences, multiple JSON objects
      */
     private _cleanJsonResponse(text: string): string {
-        // Remove markdown code blocks (```json ... ``` or ``` ... ```)
         let cleaned = text.trim();
 
-        // Match and remove opening fence (```json or ```)
-        cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '');
+        // Strategy 1: Extract JSON from code fence if present
+        // Match ```json ... ``` or ``` ... ``` (including nested content)
+        const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
+        if (fenceMatch && fenceMatch[1]) {
+            cleaned = fenceMatch[1].trim();
+        } else {
+            // Strategy 2: Remove partial fences (incomplete markdown)
+            // Opening fence at start
+            cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '');
+            // Closing fence at end
+            cleaned = cleaned.replace(/\n?```\s*$/, '');
+        }
 
-        // Match and remove closing fence (```)
-        cleaned = cleaned.replace(/\n?```\s*$/, '');
+        // Strategy 3: Find the outermost JSON object if there's extra text
+        // This handles cases where LLM adds commentary before/after JSON
+        const jsonStart = cleaned.indexOf('{');
+        const jsonEnd = cleaned.lastIndexOf('}');
+
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+            // Validate that we have balanced braces
+            const potentialJson = cleaned.substring(jsonStart, jsonEnd + 1);
+            let braceCount = 0;
+            let inString = false;
+            let escapeNext = false;
+
+            for (const char of potentialJson) {
+                if (escapeNext) {
+                    escapeNext = false;
+                    continue;
+                }
+                if (char === '\\') {
+                    escapeNext = true;
+                    continue;
+                }
+                if (char === '"') {
+                    inString = !inString;
+                    continue;
+                }
+                if (!inString) {
+                    if (char === '{') braceCount++;
+                    if (char === '}') braceCount--;
+                }
+            }
+
+            // Only use extracted JSON if braces are balanced
+            if (braceCount === 0) {
+                cleaned = potentialJson;
+            }
+        }
 
         return cleaned.trim();
     }

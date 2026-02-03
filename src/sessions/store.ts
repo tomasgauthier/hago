@@ -343,6 +343,227 @@ export class SessionStore {
     close() {
         this.db.close();
     }
+
+    // ==========================================
+    // Learning System Repository Methods
+    // ==========================================
+
+    /**
+     * Get all quiz attempts for a session and module
+     */
+    getQuizAttempts(sessionKey: string, moduleId: number): QuizAttempt[] {
+        const rows = this.db.prepare(
+            'SELECT * FROM quiz_attempts WHERE session_key = ? AND module_id = ?'
+        ).all(sessionKey, moduleId) as any[];
+
+        return rows.map(row => ({
+            id: row.id,
+            sessionKey: row.session_key,
+            moduleId: row.module_id,
+            questionIndex: row.question_index,
+            userAnswer: row.user_answer,
+            isCorrect: Boolean(row.is_correct),
+            attemptedAt: row.attempted_at
+        }));
+    }
+
+    /**
+     * Get all quiz attempts for a session (across all modules)
+     */
+    getAllQuizAttempts(sessionKey: string): QuizAttempt[] {
+        const rows = this.db.prepare(
+            'SELECT * FROM quiz_attempts WHERE session_key = ?'
+        ).all(sessionKey) as any[];
+
+        return rows.map(row => ({
+            id: row.id,
+            sessionKey: row.session_key,
+            moduleId: row.module_id,
+            questionIndex: row.question_index,
+            userAnswer: row.user_answer,
+            isCorrect: Boolean(row.is_correct),
+            attemptedAt: row.attempted_at
+        }));
+    }
+
+    /**
+     * Add a quiz attempt
+     */
+    addQuizAttempt(attempt: Omit<QuizAttempt, 'id'>): number {
+        const result = this.db.prepare(`
+            INSERT INTO quiz_attempts (
+                session_key, module_id, question_index, user_answer, is_correct, attempted_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+            attempt.sessionKey,
+            attempt.moduleId,
+            attempt.questionIndex,
+            attempt.userAnswer,
+            attempt.isCorrect ? 1 : 0,
+            attempt.attemptedAt
+        );
+        return result.lastInsertRowid as number;
+    }
+
+    /**
+     * Get distinct answered question indices for a module
+     */
+    getAnsweredQuestionIndices(sessionKey: string, moduleId: number): number[] {
+        const rows = this.db.prepare(
+            'SELECT DISTINCT question_index FROM quiz_attempts WHERE session_key = ? AND module_id = ?'
+        ).all(sessionKey, moduleId) as any[];
+
+        return rows.map(row => row.question_index);
+    }
+
+    /**
+     * Get a learning module by ID
+     */
+    getLearningModule(moduleId: number): LearningModule | undefined {
+        const row = this.db.prepare(
+            'SELECT * FROM learning_modules WHERE id = ?'
+        ).get(moduleId) as any;
+
+        if (!row) return undefined;
+
+        return {
+            id: row.id,
+            learningPathId: row.learning_path_id,
+            moduleNumber: row.module_number,
+            title: row.title,
+            content: row.content,
+            estimatedTimeMin: row.estimated_time_min,
+            quizQuestions: row.quiz_questions || undefined,
+            completed: Boolean(row.completed),
+            completedAt: row.completed_at || undefined,
+            timeSpentSec: row.time_spent_sec || 0
+        };
+    }
+
+    /**
+     * Get a learning path by ID
+     */
+    getLearningPath(pathId: number): LearningPath | undefined {
+        const row = this.db.prepare(
+            'SELECT * FROM learning_paths WHERE id = ?'
+        ).get(pathId) as any;
+
+        if (!row) return undefined;
+
+        return {
+            id: row.id,
+            sessionKey: row.session_key,
+            title: row.title,
+            topic: row.topic,
+            difficulty: row.difficulty,
+            language: row.language,
+            totalDurationMin: row.total_duration_min,
+            researchData: row.research_data || undefined,
+            status: row.status,
+            createdAt: row.created_at,
+            completedAt: row.completed_at || undefined
+        };
+    }
+
+    /**
+     * Get user learning profile
+     */
+    getLearningProfile(sessionKey: string): UserLearningProfile | undefined {
+        const row = this.db.prepare(
+            'SELECT * FROM user_learning_profiles WHERE session_key = ?'
+        ).get(sessionKey) as any;
+
+        if (!row) return undefined;
+
+        return {
+            id: row.id,
+            sessionKey: row.session_key,
+            preferredDifficulty: row.preferred_difficulty || undefined,
+            preferredLanguage: row.preferred_language || undefined,
+            avgModuleTimeSec: row.avg_module_time_sec || undefined,
+            completionRate: row.completion_rate || undefined,
+            quizAvgScore: row.quiz_avg_score || undefined,
+            learningStyle: row.learning_style || undefined,
+            teachingPace: row.teaching_pace || undefined,
+            preferredAnalogyDomains: row.preferred_analogy_domains || undefined,
+            lastUpdated: row.last_updated || undefined
+        };
+    }
+
+    /**
+     * Update or create user learning profile
+     */
+    upsertLearningProfile(sessionKey: string, updates: Partial<Omit<UserLearningProfile, 'id' | 'sessionKey'>>): void {
+        const existing = this.getLearningProfile(sessionKey);
+        const now = Date.now();
+
+        if (existing) {
+            const setClauses: string[] = [];
+            const values: any[] = [];
+
+            if (updates.preferredDifficulty !== undefined) {
+                setClauses.push('preferred_difficulty = ?');
+                values.push(updates.preferredDifficulty);
+            }
+            if (updates.preferredLanguage !== undefined) {
+                setClauses.push('preferred_language = ?');
+                values.push(updates.preferredLanguage);
+            }
+            if (updates.avgModuleTimeSec !== undefined) {
+                setClauses.push('avg_module_time_sec = ?');
+                values.push(updates.avgModuleTimeSec);
+            }
+            if (updates.completionRate !== undefined) {
+                setClauses.push('completion_rate = ?');
+                values.push(updates.completionRate);
+            }
+            if (updates.quizAvgScore !== undefined) {
+                setClauses.push('quiz_avg_score = ?');
+                values.push(updates.quizAvgScore);
+            }
+            if (updates.learningStyle !== undefined) {
+                setClauses.push('learning_style = ?');
+                values.push(updates.learningStyle);
+            }
+            if (updates.teachingPace !== undefined) {
+                setClauses.push('teaching_pace = ?');
+                values.push(updates.teachingPace);
+            }
+            if (updates.preferredAnalogyDomains !== undefined) {
+                setClauses.push('preferred_analogy_domains = ?');
+                values.push(updates.preferredAnalogyDomains);
+            }
+
+            setClauses.push('last_updated = ?');
+            values.push(now);
+            values.push(sessionKey);
+
+            if (setClauses.length > 1) {
+                this.db.prepare(
+                    `UPDATE user_learning_profiles SET ${setClauses.join(', ')} WHERE session_key = ?`
+                ).run(...values);
+            }
+        } else {
+            this.db.prepare(`
+                INSERT INTO user_learning_profiles (
+                    session_key, preferred_difficulty, preferred_language, avg_module_time_sec,
+                    completion_rate, quiz_avg_score, learning_style, teaching_pace,
+                    preferred_analogy_domains, last_updated
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                sessionKey,
+                updates.preferredDifficulty || null,
+                updates.preferredLanguage || null,
+                updates.avgModuleTimeSec || null,
+                updates.completionRate || null,
+                updates.quizAvgScore || null,
+                updates.learningStyle || null,
+                updates.teachingPace || null,
+                updates.preferredAnalogyDomains || null,
+                now
+            );
+        }
+    }
 }
 
 /** Per-token cost rates (USD) for known models. Rates are per token (not per 1M). */
