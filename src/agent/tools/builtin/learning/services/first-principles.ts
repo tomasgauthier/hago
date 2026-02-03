@@ -313,14 +313,14 @@ export class FirstPrinciplesService {
             try {
                 content = JSON.parse(cleanedJson);
             } catch (parseError: any) {
-                logger.error('Failed to parse LLM JSON response:', cleanedJson.substring(0, 500));
+                logger.error({ response: cleanedJson.substring(0, 500) }, 'Failed to parse LLM JSON response');
                 throw new Error(`Invalid JSON from LLM: ${parseError.message}. Response preview: ${cleanedJson.substring(0, 200)}`);
             }
 
             return content;
 
         } catch (error: any) {
-            logger.error('❌ Error in Phases 1-2:', error);
+            logger.error({ err: error }, 'Error in Phases 1-2');
             throw new Error(`Failed to generate core phases: ${error.message}`);
         }
     }
@@ -367,14 +367,14 @@ export class FirstPrinciplesService {
             try {
                 content = JSON.parse(cleanedJson);
             } catch (parseError: any) {
-                logger.error('Failed to parse LLM JSON response:', cleanedJson.substring(0, 500));
+                logger.error({ response: cleanedJson.substring(0, 500) }, 'Failed to parse LLM JSON response');
                 throw new Error(`Invalid JSON from LLM: ${parseError.message}. Response preview: ${cleanedJson.substring(0, 200)}`);
             }
 
             return content;
 
         } catch (error: any) {
-            logger.error('❌ Error in Phase 3:', error);
+            logger.error({ err: error }, 'Error in Phase 3');
             throw new Error(`Failed to generate synthesis phase: ${error.message}`);
         }
     }

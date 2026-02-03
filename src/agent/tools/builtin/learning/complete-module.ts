@@ -112,7 +112,11 @@ export function createLearningCompleteModuleTool(deps: CompleteModuleDeps): Tool
                     'SELECT * FROM learning_paths WHERE id = ?'
                 ).get(module.learning_path_id) as LearningPath | undefined;
 
-                const language = path?.language || 'en';
+                if (!path) {
+                    return formatMessage('en', messages, 'error', { error: 'Learning path not found' });
+                }
+
+                const language = path.language || 'en';
 
                 // Check if module has quiz and if it's been completed
                 const quizData: QuizQuestion[] = module.quiz_questions ? JSON.parse(module.quiz_questions) : [];
@@ -211,7 +215,7 @@ export function createLearningCompleteModuleTool(deps: CompleteModuleDeps): Tool
                 // Update learning session
                 const session = deps.sessionStore.db.prepare(
                     'SELECT * FROM learning_sessions WHERE learning_path_id = ? AND session_key = ? AND ended_at IS NULL'
-                ).get(path?.id, context.sessionKey) as LearningSession | undefined;
+                ).get(path.id, context.sessionKey) as LearningSession | undefined;
 
                 if (session) {
                     const completedCount = (session.modules_completed || 0) + 1;
@@ -225,7 +229,7 @@ export function createLearningCompleteModuleTool(deps: CompleteModuleDeps): Tool
                 // Get all modules to calculate progress
                 const allModules = deps.sessionStore.db.prepare(
                     'SELECT * FROM learning_modules WHERE learning_path_id = ? ORDER BY module_number'
-                ).all(path?.id || 0) as LearningModule[];
+                ).all(path.id) as LearningModule[];
 
                 const completedModules = allModules.filter(m => m.completed);
                 const progressPercent = Math.round((completedModules.length / allModules.length) * 100);

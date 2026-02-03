@@ -419,10 +419,10 @@ function _extractModulesFromPath(learningPath: any): ExtractedModule[] {
  * Generate quiz for Module 1: Core Concept
  */
 function _generateQuizForConcept(decomposition: any): QuizQuestion[] {
-    const quiz = [
+    const quiz: QuizQuestion[] = [
         {
             question: `¿Cuál es la idea central de "${decomposition.conceptoClave.titulo}"?`,
-            type: 'multiple_choice',
+            type: 'multiple_choice' as const,
             options: [
                 decomposition.conceptoClave.definicion.substring(0, 60),
                 'Una metodología de trabajo',
@@ -441,7 +441,7 @@ function _generateQuizForConcept(decomposition: any): QuizQuestion[] {
         const why = decomposition.cincoWhys[decomposition.cincoWhys.length - 1];
         quiz.push({
             question: `Verdadero o Falso: ${why.pregunta} → ${why.respuesta.substring(0, 100)}`,
-            type: 'true_false',
+            type: 'true_false' as const,
             options: ['Verdadero / True', 'Falso / False'],
             correctAnswer: 'true',
             correctOptionId: 0,
