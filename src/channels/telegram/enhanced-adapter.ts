@@ -72,14 +72,18 @@ export class EnhancedTelegramChannel implements Channel {
             if (this.handler) {
                 const sessionKey = `telegram:${ctx.chat.id}`;
                 this.messageHistory.set(sessionKey, ctx.message.message_id);
-                
+
+                // Store user name for personalization
+                const userName = ctx.from?.first_name || ctx.from?.username || undefined;
+
                 this.handler({
                     id: ctx.message.message_id.toString(),
                     sessionKey,
                     text: ctx.message.text,
                     channelId: this.id,
                     timestamp: ctx.message.date,
-                    type: 'text'
+                    type: 'text',
+                    userName
                 });
             }
         });
@@ -115,11 +119,70 @@ export class EnhancedTelegramChannel implements Channel {
             }
 
             if (this.handler && ctx.pollAnswer.user) {
-                const answerText = `Poll answer: options ${ctx.pollAnswer.option_ids.join(', ')}`;
-                
+                const pollId = ctx.pollAnswer.poll_id;
+                const selectedOption = ctx.pollAnswer.option_ids[0];
+                const sessionKey = `telegram:${ctx.pollAnswer.user.id}`;
+
+                // Lookup poll metadata by real Telegram poll_id
+                const container = (global as any).container;
+                let quizMetadata = null;
+
+                if (container?.sessions?.db) {
+                    try {
+                        // Match by exact Telegram poll_id first
+                        quizMetadata = container.sessions.db.prepare(
+                            'SELECT * FROM poll_metadata WHERE poll_id = ?'
+                        ).get(pollId) as any;
+
+                        // Fallback: match by session and recency if exact match not found
+                        if (!quizMetadata) {
+                            quizMetadata = container.sessions.db.prepare(
+                                'SELECT * FROM poll_metadata WHERE session_key = ? ORDER BY created_at DESC LIMIT 1'
+                            ).get(sessionKey) as any;
+                        }
+                    } catch (err: any) {
+                        logger.warn(`Failed to lookup poll metadata: ${err.message}`);
+                    }
+                }
+
+                let answerText: string;
+
+                if (quizMetadata) {
+                    // Get the actual quiz question to find the selected option text
+                    let selectedOptionText = `option_${selectedOption}`;
+                    try {
+                        const module = container.sessions.db.prepare(
+                            'SELECT quiz_questions FROM learning_modules WHERE id = ?'
+                        ).get(quizMetadata.module_id) as any;
+
+                        if (module?.quiz_questions) {
+                            const questions = JSON.parse(module.quiz_questions);
+                            const question = questions[quizMetadata.question_index];
+                            if (question?.options && question.options[selectedOption]) {
+                                selectedOptionText = question.options[selectedOption];
+                            }
+                        }
+                    } catch (err: any) {
+                        logger.warn(`Failed to get quiz question text: ${err.message}`);
+                    }
+
+                    answerText = `[QUIZ_POLL_ANSWER] The user answered a quiz poll. Submit their answer using: learning_quiz_answer(module_id=${quizMetadata.module_id}, question_index=${quizMetadata.question_index}, answer="${selectedOptionText}")`;
+
+                    // Remove this poll from metadata so next answer maps to next question
+                    try {
+                        container.sessions.db.prepare(
+                            'DELETE FROM poll_metadata WHERE id = ?'
+                        ).run(quizMetadata.id);
+                    } catch { /* ignore */ }
+
+                    logger.info(`Quiz poll answer: module=${quizMetadata.module_id}, q=${quizMetadata.question_index}, option=${selectedOption} ("${selectedOptionText}")`);
+                } else {
+                    answerText = `Poll answer: options ${ctx.pollAnswer.option_ids.join(', ')}`;
+                }
+
                 this.handler({
-                    id: `poll_${ctx.pollAnswer.poll_id}`,
-                    sessionKey: `telegram:${ctx.pollAnswer.user.id}`, // Use user ID for poll answers
+                    id: `poll_${pollId}`,
+                    sessionKey,
                     text: answerText,
                     channelId: this.id,
                     timestamp: Math.floor(Date.now() / 1000),
@@ -230,7 +293,7 @@ export class EnhancedTelegramChannel implements Channel {
         logger.info('Enhanced Telegram bot stopped');
     }
 
-    async sendMessage(msg: OutboundMessage | TelegramOutboundMessage) {
+    async sendMessage(msg: OutboundMessage | TelegramOutboundMessage): Promise<any> {
         const chatId = msg.sessionKey.split(':')[1];
         const telegramMsg = msg as TelegramOutboundMessage;
 
@@ -238,7 +301,7 @@ export class EnhancedTelegramChannel implements Channel {
             switch (telegramMsg.type) {
                 case 'poll':
                     if (telegramMsg.pollOptions && telegramMsg.pollOptions.length >= 2) {
-                        await this.bot.api.sendPoll(
+                        const pollResult = await this.bot.api.sendPoll(
                             chatId,
                             telegramMsg.text,
                             telegramMsg.pollOptions,
@@ -246,9 +309,16 @@ export class EnhancedTelegramChannel implements Channel {
                                 is_anonymous: false,
                                 type: telegramMsg.pollType || 'regular',
                                 correct_option_id: telegramMsg.correctOptionId,
+                                explanation: (telegramMsg as any).explanation,
                                 allows_multiple_answers: telegramMsg.pollType === 'regular'
                             }
                         );
+
+                        // Return the poll_id for tracking
+                        if (pollResult?.poll?.id) {
+                            return { poll_id: pollResult.poll.id, message_id: pollResult.message_id };
+                        }
+                        return pollResult;
                     }
                     break;
 
@@ -320,6 +390,20 @@ export class EnhancedTelegramChannel implements Channel {
     // Helper method to get the last message ID for a session (for reactions/editing)
     getLastMessageId(sessionKey: string): number | undefined {
         return this.messageHistory.get(sessionKey);
+    }
+
+    /**
+     * Send a typing indicator (chat action) to show bot is working
+     * @param sessionKey - The session key (telegram:chatId format)
+     * @param action - The type of action: 'typing', 'upload_photo', 'record_video', etc.
+     */
+    async sendChatAction(sessionKey: string, action: 'typing' | 'upload_photo' | 'record_video' | 'upload_document' = 'typing'): Promise<void> {
+        const chatId = sessionKey.split(':')[1];
+        try {
+            await this.bot.api.sendChatAction(chatId, action);
+        } catch (err: any) {
+            logger.warn(`Failed to send chat action: ${err.message}`);
+        }
     }
 
     /**

@@ -5,7 +5,8 @@ export interface InboundMessage {
     channelId: string;
     timestamp?: number; // Unix epoch seconds (message send time)
     type?: string; // Message type (text, callback_query, poll_answer, reaction, etc.)
-    
+    userName?: string; // User's display name from the channel
+
     // Extended properties for rich message types
     callbackData?: string;
     pollAnswers?: number[];

@@ -28,7 +28,7 @@ interface InlineKeyboardButton {
  */
 export const telegramCreatePollTool: ToolDefinition = {
     name: 'telegram_create_poll',
-    description: `Create a poll in Telegram. Use this when the user asks about creating a survey, 
+    description: `Create a poll in Telegram. Use this when the user asks about creating a survey,
 poll, or wants to gather opinions from multiple choice options.
 
 Examples:
@@ -37,10 +37,23 @@ Examples:
     parameters: z.object({
         question: z.string().describe('The poll question'),
         options: z.array(z.string()).describe('Array of poll options (2-10 options)'),
-        type: z.enum(['regular', 'quiz']).optional().describe('Poll type: regular (multiple answers) or quiz (single correct answer)'),
-        correctOptionIndex: z.number().optional().describe('Index of correct answer (0-based) for quiz type'),
+        poll_type: z.enum(['regular', 'quiz']).optional().describe('Poll type: regular (multiple answers) or quiz (single correct answer)'),
+        correct_option_id: z.number().optional().describe('Index of correct answer (0-based) for quiz type'),
+        explanation: z.string().optional().describe('Explanation shown after answering (quiz type only)'),
+        module_id: z.number().optional().describe('Learning module ID (for quiz tracking)'),
+        question_index: z.number().optional().describe('Question index within module (for quiz tracking)'),
     }),
-    execute: async ({ question, options, type = 'regular', correctOptionIndex }, context?: ToolExecutionContext) => {
+    execute: async (args: any, context?: ToolExecutionContext) => {
+        const {
+            question,
+            options,
+            poll_type = 'regular',
+            correct_option_id,
+            explanation,
+            module_id,
+            question_index
+        } = args;
+
         if (!context?.sessionKey) {
             return 'Error: No session context available.';
         }
@@ -53,8 +66,8 @@ Examples:
             return 'Error: Polls must have between 2 and 10 options.';
         }
 
-        if (type === 'quiz' && (correctOptionIndex === undefined || correctOptionIndex < 0 || correctOptionIndex >= options.length)) {
-            return 'Error: Quiz polls require a valid correctOptionIndex (0-based).';
+        if (poll_type === 'quiz' && (correct_option_id === undefined || correct_option_id < 0 || correct_option_id >= options.length)) {
+            return 'Error: Quiz polls require a valid correct_option_id (0-based).';
         }
 
         const container = (global as any).container;
@@ -68,21 +81,41 @@ Examples:
                 return 'Error: Telegram channel not available.';
             }
 
-            const pollMessage: TelegramOutboundMessage = {
+            const pollMessage: any = {
                 sessionKey: context.sessionKey,
                 text: question,
                 type: 'poll',
                 pollOptions: options,
-                pollType: type,
-                correctOptionId: type === 'quiz' ? correctOptionIndex : undefined,
+                pollType: poll_type,
+                correctOptionId: poll_type === 'quiz' ? correct_option_id : undefined,
+                explanation: explanation,
             };
 
-            await telegramChannel.sendMessage(pollMessage);
+            const sentResult = await telegramChannel.sendMessage(pollMessage);
 
-            const pollType = type === 'quiz' ? 'Quiz' : 'Poll';
-            return `✅ ${pollType} created successfully!
-📊 Question: "${question}"
-📋 Options: ${options.map((opt: string, i: number) => `${i + 1}. ${opt}`).join(', ')}`;
+            // Store poll metadata for quiz tracking using real Telegram poll_id
+            if (module_id !== undefined && question_index !== undefined) {
+                const sessions = container.sessions;
+                if (sessions?.db) {
+                    const realPollId = sentResult?.poll_id || `poll_${Date.now()}_${module_id}_${question_index}`;
+
+                    sessions.db.prepare(`
+                        INSERT INTO poll_metadata (poll_id, session_key, module_id, question_index, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    `).run(realPollId, context.sessionKey, module_id, question_index, Date.now());
+
+                    logger.info(`Stored poll metadata: poll_id=${realPollId} for module ${module_id}, question ${question_index}`);
+                }
+            }
+
+            const pollType = poll_type === 'quiz' ? 'Quiz' : 'Poll';
+            let response = `✅ ${pollType} created successfully!\n📊 Question: "${question}"\n📋 Options: ${options.map((opt: string, i: number) => `${i + 1}. ${opt}`).join(', ')}`;
+
+            if (poll_type === 'quiz' && module_id !== undefined) {
+                response += `\n\n✨ Quiz answers will be tracked automatically when the user responds.`;
+            }
+
+            return response;
         } catch (err: any) {
             logger.error(`Failed to create poll: ${err.message}`);
             return `Error creating poll: ${err.message}`;

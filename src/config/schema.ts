@@ -76,6 +76,19 @@ export const AppConfigSchema = z.object({
     selfModification: z.object({
         enabled: z.boolean().default(false),
     }).default({}),
+    learning: z.object({
+        enabled: z.boolean().default(false),
+        perplexityApiKey: z.string().optional(),
+        defaultLanguage: z.string().default('en'),
+        autoDetectLanguage: z.boolean().default(true),
+        defaultDuration: z.number().default(25),
+        defaultMethodology: z.enum(['first_principles', 'workshop']).default('first_principles'),
+        adaptiveDifficulty: z.boolean().default(true),
+        quizEnabled: z.boolean().default(true),
+        pomodoroTimer: z.object({
+            enabled: z.boolean().default(true),
+        }).default({}),
+    }).default({ enabled: false }),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

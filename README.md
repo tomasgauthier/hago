@@ -312,6 +312,293 @@ The mind system has explicit protections against self-corruption:
 
 7. **Multi-user isolation** — The `mind_log` table includes a `session_key` column, allowing mind signals to be tracked per-user in multi-user deployments.
 
+## AI-Powered Micro-Learning System
+
+haGo includes a sophisticated learning system that creates personalized, 25-minute learning paths using First Principles methodology. It adapts to your conversation history, language, knowledge level, and learning preferences.
+
+### Why This Matters
+
+Traditional learning platforms deliver the same content to everyone. haGo's learning system personalizes based on who you are:
+
+- **Automatic language detection** — Detects your native language from conversation patterns (Spanish, English, Portuguese, etc.)
+- **Adaptive difficulty** — Infers your knowledge level by analyzing technical term density in your messages
+- **Personalized analogies** — Uses your tool usage patterns to select relevant analogies (e.g., if you use Obsidian frequently, learning content uses knowledge management analogies)
+- **Spiritual Biology integration** — Learning difficulty feeds back into the mind system, enabling teaching improvements over time
+
+### Architecture: First Principles Methodology
+
+Each learning path follows a rigorous 3-phase structure:
+
+**Phase 1: Decomposition (10 min)**
+- Identifies the core concept
+- Applies the "5 Whys" technique to break down to fundamentals
+- Extracts 4 irreducible principles that cannot be further reduced
+
+**Phase 2: Reconstruction (10 min)**
+- Presents a real-world challenge
+- Models a solution step-by-step using only the irreducible principles
+- Shows how complex outcomes emerge from simple foundations
+
+**Phase 3: Synthesis (5 min)**
+- Tests principles through hypothetical falsification experiments
+- Transfers concepts to other domains (e.g., "quantum superposition principles apply to probability theory")
+- Closes with metacognitive reflection
+
+This approach ensures deep understanding, not surface memorization. You learn *why* things work, not just *what* they are.
+
+### Multi-Language Support
+
+The learning system is fully internationalized:
+
+- **Auto-detection**: Analyzes your conversation history for language-specific patterns (e.g., "qué", "cómo" for Spanish)
+- **Native content generation**: All learning content (modules, quizzes, UI messages) generated in your detected language
+- **Supported languages**: Spanish (es), English (en), Portuguese (pt), with easy extensibility for more
+
+Example detection logic:
+```
+User's recent messages contain: "gracias", "qué tal", "cómo estás"
+→ Detected language: Spanish
+→ Learning path generated entirely in Spanish
+```
+
+### How It Works
+
+**1. Create a Learning Path**
+
+Tell haGo what you want to learn:
+
+```
+User: "Enséñame sobre redes neuronales"
+(or: "Teach me about neural networks")
+
+haGo: 📚 Creating personalized learning path on "Redes Neuronales"...
+
+[Analyzing your conversation history...]
+Language detected: Spanish
+Detected level: Intermediate
+Preferred analogies: Software development
+
+✅ Learning path ready: "Redes Neuronales: Primeros Principios"
+
+📖 Structure:
+• Module 1: ¿Qué es una neurona artificial? (5 min)
+• Module 2: Capas y propagación hacia adelante (5 min)
+• Module 3: Función de pérdida como métrica (5 min)
+• Module 4: Retropropagación y gradientes (5 min)
+• Module 5: Entrenamiento en la práctica (5 min)
+
+Total: 25 minutes (1 Pomodoro session)
+
+Ready to start? Say "Empezar ruta de redes neuronales" or use:
+/learning_start_session path_id=1
+```
+
+**2. Start a Learning Session**
+
+```
+User: "Empezar ruta de redes neuronales"
+
+haGo: 📖 Module 1/5: ¿Qué es una Neurona Artificial?
+
+**Concepto Central:**
+Una neurona artificial es como una función matemática que toma
+múltiples entradas y produce una salida - similar a cómo una
+función en código procesa parámetros...
+
+[Full module content in markdown with code analogies]
+
+**Verificación Rápida:** ❓
+¿Qué componentes son esenciales en una neurona artificial?
+a) Solo las entradas
+b) Entradas, pesos, función de activación
+c) Solo la función de activación
+
+Reply: /learning_quiz_answer module_id=1 question_index=0 answer=b
+```
+
+**3. Complete Modules & Track Progress**
+
+```
+User: /learning_quiz_answer module_id=1 question_index=0 answer=b
+
+haGo: ✅ ¡Correcto!
+
+📊 Your performance: 100% (1/1 correct)
+
+User: /learning_complete_module module_id=1 time_spent_min=5 difficulty_rating=2
+
+haGo: ✅ Module 1/5 completed! Next module ready.
+
+User: /learning_get_progress
+
+haGo: 📊 Your Learning Progress
+
+**Redes Neuronales: Primeros Principios**
+Progress: ████████░░ 60% (3/5 modules)
+Time spent: 18 minutes
+Last activity: 2 hours ago
+
+Total paths: 2 | Completed: 1 | In progress: 1
+```
+
+### Spiritual Biology Integration
+
+The learning system creates a two-way feedback loop with the mind system:
+
+**Learning → Mind:**
+- When you rate a module difficulty ≥ 4/5, it logs a stress signal
+- Incorrect quiz answers logged as confessions
+- Multiple difficulty signals on the same topic accumulate
+
+**Mind → Learning:**
+- During dream phase, accumulated learning friction is analyzed
+- Bot proposes teaching improvements: "When teaching calculus-heavy topics, add visual diagrams before equations"
+- You approve the learning → future paths on that topic are adapted
+
+This means haGo literally gets better at teaching you over time, based on where you struggle.
+
+### Personalization Features
+
+**1. Language Detection**
+```typescript
+// Analyzes last 50 messages for language-specific patterns
+const spanishPatterns = ['qué', 'cómo', 'por qué', 'cuál', 'dónde', ...]
+const portuguesePatterns = ['você', 'não', 'obrigado', ...]
+
+if (spanishMatches >= 3) language = 'es'
+```
+
+**2. Difficulty Inference**
+```typescript
+// Counts technical terms in conversation history
+const techTerms = ['algorithm', 'tensor', 'gradient', 'derivative', ...]
+const density = techTermCount / totalWords
+
+if (density > 0.3) difficulty = 'advanced'
+if (density > 0.15) difficulty = 'intermediate'
+else difficulty = 'beginner'
+```
+
+**3. Analogy Domain Detection**
+```typescript
+// Infers from tool usage patterns
+if (obsidian_tools used > 0) → analogyDomains.push('knowledge management')
+if (shell_execute used > 5) → analogyDomains.push('software development')
+if (browser_* used > 0) → analogyDomains.push('web development')
+```
+
+### Research Integration (Optional)
+
+Learning paths can integrate academic research via two methods:
+
+**1. Perplexity API (Optional)**
+- Uses Perplexity's 7-level source hierarchy (academic preprints → standards bodies → journals → docs)
+- Prioritizes authoritative sources (arxiv.org, ieee.org, nature.com)
+- Configure via `PERPLEXITY_API_KEY` in `.env`
+
+**2. Web Search Fallback**
+- Uses haGo's existing `web_search` tool if no Perplexity key
+- Still applies source quality ranking
+
+Research data is embedded into module content, providing citations and authoritative backing for concepts.
+
+### Storage
+
+All learning data lives in SQLite:
+
+| Table | Contents |
+|-------|----------|
+| `learning_paths` | Path metadata: title, topic, language, difficulty, research data |
+| `learning_modules` | 5 modules per path with full markdown content and quiz questions |
+| `user_learning_profiles` | Per-user preferences: language, difficulty, completion rate, quiz avg |
+| `user_progress` | Module completion tracking with time spent and difficulty ratings |
+| `quiz_attempts` | Quiz performance history for each question |
+| `learning_sessions` | Pomodoro session tracking |
+
+### Configuration
+
+Enable in `config.json5`:
+
+```json5
+{
+    learning: {
+        enabled: true,
+        perplexityApiKey: 'pplx-xxxxx',  // Optional
+        defaultLanguage: 'es',           // Fallback if auto-detect fails
+        autoDetectLanguage: true,        // Auto-detect from conversation
+        defaultDuration: 25,             // Minutes per path
+        adaptiveDifficulty: true,        // Infer from conversation
+        quizEnabled: true,
+        pomodoroTimer: { enabled: true },
+    },
+}
+```
+
+### Tools
+
+| Tool | Description |
+|------|-------------|
+| `learning_create_path` | Generate personalized 25-min learning path with First Principles methodology |
+| `learning_start_session` | Start Pomodoro learning session, loads first incomplete module |
+| `learning_complete_module` | Mark module complete, track time and difficulty (feeds Spiritual Biology) |
+| `learning_get_progress` | View progress across all paths with completion %, time spent, next steps |
+| `learning_quiz_answer` | Submit quiz answers with immediate feedback and performance tracking |
+
+### Performance
+
+- **Path generation time**: <35 seconds (research 3-5s + content generation 20-30s)
+- **API cost per path**: ~$0.005 USD (Perplexity $0.001 + GPT-4o-mini $0.004)
+- **Storage per path**: ~50 KB (5 modules × 10 KB each)
+
+### Example: Spanish User Flow
+
+```
+Usuario: "Enséñame sobre computación cuántica"
+
+haGo: 📚 Creando ruta de aprendizaje personalizada sobre "Computación Cuántica"...
+
+[Analizando tu historial de conversación...]
+Idioma detectado: Español
+Nivel detectado: Intermedio
+Analogías preferidas: Desarrollo de software
+
+🔍 Investigando fuentes académicas...
+⚙️  Generando contenido educativo...
+
+✅ Ruta de aprendizaje lista: "Computación Cuántica: Primeros Principios"
+
+📖 Estructura:
+• Módulo 1: ¿Qué es la superposición? (5 min)
+• Módulo 2: Fundamentos del entrelazamiento (5 min)
+• Módulo 3: Puertas cuánticas como funciones (5 min)
+• Módulo 4: Construyendo un circuito cuántico (5 min)
+• Módulo 5: Aplicaciones del mundo real (5 min)
+
+Total: 25 minutos (1 sesión Pomodoro)
+
+¿Listo para comenzar? Di "Empezar ruta de computación cuántica"
+```
+
+All module content, quiz questions, and UI messages are in Spanish. The system has automatically adapted to the user's native language without any manual configuration.
+
+### What Makes This Different
+
+**vs. ChatGPT "Memory":**
+- ChatGPT stores facts ("user prefers Python"). haGo adapts teaching *methodology* based on observed friction patterns.
+
+**vs. Traditional Learning Platforms (Coursera, Udemy):**
+- Those deliver static content to everyone. haGo generates content dynamically based on your conversation history, tool usage, and demonstrated knowledge level.
+
+**vs. RAG/Retrieval Systems:**
+- RAG retrieves existing information. This *generates* structured learning content using First Principles methodology, ensuring deep understanding rather than surface recall.
+
+**The Strategic Advantage:**
+- Combines First Principles pedagogy with personalization
+- Multi-language from day one (no English-only limitation)
+- Integrates with Spiritual Biology for teaching improvements
+- Lightweight (SQLite, single process, <35s path generation)
+- Academic research integration via Perplexity or web search
+
 ## Configuration Reference
 
 ### `config.json5`

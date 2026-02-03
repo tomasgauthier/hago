@@ -2,7 +2,9 @@ import { Channel, InboundMessage, OutboundMessage } from './types.js';
 import { AgentRunner } from '../agent/runner.js';
 import { AgentRouter } from '../agent/router.js';
 import { logger } from '../utils/logger.js';
+import { setUserName } from '../agent/identity.js';
 import type { SessionStore } from '../sessions/store.js';
+import { createThread } from '../utils/message-chunker.js';
 
 /** Keywords that trigger individual processing even when stale */
 const ACTION_KEYWORDS = /\b(pendiente|diario|gasto|thought|idea)\b/i;
@@ -41,6 +43,10 @@ export class ChannelManager {
         logger.info(`Channel registered: ${channel.id}`);
     }
 
+    getChannel(channelId: string): Channel | undefined {
+        return this.channels.get(channelId);
+    }
+
     updateChannelConfig(channelId: string, config: any) {
         const channel = this.channels.get(channelId);
         if (channel && channel.updateConfig) {
@@ -59,9 +65,24 @@ export class ChannelManager {
         const channel = this.channels.get(msg.channelId);
         if (!channel) return;
 
+        // Cache user name for personalization in system prompt
+        if (msg.userName) {
+            setUserName(msg.sessionKey, msg.userName);
+        }
+
         const sendReply = async (fullText: string) => {
             if (fullText) {
-                await channel.sendMessage({ sessionKey: msg.sessionKey, text: fullText });
+                // Automatically chunk long messages for messaging platforms
+                const chunks = createThread(fullText, { maxLength: 3800 });
+
+                for (const chunk of chunks) {
+                    await channel.sendMessage({ sessionKey: msg.sessionKey, text: chunk });
+
+                    // Small delay between messages to avoid rate limits
+                    if (chunks.length > 1) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                }
             }
         };
 
@@ -119,7 +140,15 @@ export class ChannelManager {
             // Single stale message — just process it normally
             logger.info(`Flushing 1 offline message for ${sessionKey}`);
             await this.runQueued(sessionKey, messages[0].text, async (fullText) => {
-                if (fullText) await channel.sendMessage({ sessionKey, text: fullText });
+                if (fullText) {
+                    const chunks = createThread(fullText, { maxLength: 3800 });
+                    for (const chunk of chunks) {
+                        await channel.sendMessage({ sessionKey, text: chunk });
+                        if (chunks.length > 1) {
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                    }
+                }
             });
             return;
         }
@@ -137,7 +166,15 @@ export class ChannelManager {
         logger.info(`Flushing ${messages.length} offline messages as batch for ${sessionKey}`);
 
         await this.runQueued(sessionKey, batchedText, async (fullText) => {
-            if (fullText) await channel.sendMessage({ sessionKey, text: fullText });
+            if (fullText) {
+                const chunks = createThread(fullText, { maxLength: 3800 });
+                for (const chunk of chunks) {
+                    await channel.sendMessage({ sessionKey, text: chunk });
+                    if (chunks.length > 1) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                }
+            }
         });
     }
 

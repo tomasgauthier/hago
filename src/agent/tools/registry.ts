@@ -38,23 +38,45 @@ export class ToolRegistry {
         const required: string[] = [];
 
         for (const [key, value] of Object.entries(shape) as any) {
-            let type = 'string';
             let description = '';
 
-            // Extract type
+            // Extract type, unwrapping Optional/Default
             let innerType = value;
             while (innerType instanceof z.ZodOptional || innerType instanceof z.ZodDefault) {
                 innerType = innerType._def.innerType;
             }
 
-            if (innerType instanceof z.ZodNumber) type = 'number';
-            if (innerType instanceof z.ZodBoolean) type = 'boolean';
-
             // Extract description
             description = (value as any)._def.description || '';
 
+            // Build property schema based on Zod type
+            let propSchema: any;
+
+            if (innerType instanceof z.ZodArray) {
+                // Handle arrays - extract item type
+                const itemType = innerType._def.type;
+                let itemSchema: any = { type: 'string' };
+                if (itemType instanceof z.ZodNumber) itemSchema = { type: 'number' };
+                else if (itemType instanceof z.ZodBoolean) itemSchema = { type: 'boolean' };
+                else if (itemType instanceof z.ZodObject) itemSchema = this.zodToJSONSchema(itemType);
+                else if (itemType instanceof z.ZodArray) itemSchema = { type: 'array', items: { type: 'string' } };
+
+                propSchema = { type: 'array', items: itemSchema };
+            } else if (innerType instanceof z.ZodEnum) {
+                // Handle enums - include allowed values
+                propSchema = { type: 'string', enum: innerType._def.values };
+            } else if (innerType instanceof z.ZodNumber) {
+                propSchema = { type: 'number' };
+            } else if (innerType instanceof z.ZodBoolean) {
+                propSchema = { type: 'boolean' };
+            } else if (innerType instanceof z.ZodObject) {
+                propSchema = this.zodToJSONSchema(innerType);
+            } else {
+                propSchema = { type: 'string' };
+            }
+
             properties[key] = {
-                type,
+                ...propSchema,
                 ...(description ? { description } : {}),
             };
 

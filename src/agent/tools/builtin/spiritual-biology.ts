@@ -122,6 +122,44 @@ Manual trigger only.`,
             const logsFormatted = mindStore.formatLogsForDreamFull(args.days_to_analyze);
             const currentLearnings = mindStore.formatApprovedLearnings();
 
+            // Format learning friction signals
+            const learningStress = mindStore.getLogs('stress')
+                .filter((log: any) => {
+                    const payload = typeof log.payload === 'string' ? JSON.parse(log.payload) : log.payload;
+                    return payload.signal_type === 'learning_difficulty' &&
+                        log.created_at > Date.now() - (args.days_to_analyze * 86400000);
+                })
+                .map((log: any) => {
+                    const payload = typeof log.payload === 'string' ? JSON.parse(log.payload) : log.payload;
+                    return `  - Module: "${payload.context}" | Difficulty: ${payload.intensity}/5 | Topic: ${payload.topic || 'unknown'}`;
+                });
+
+            const learningConfessions = mindStore.getLogs('confession')
+                .filter((log: any) => {
+                    const payload = typeof log.payload === 'string' ? JSON.parse(log.payload) : log.payload;
+                    return payload.category === 'learning_quiz_incorrect' &&
+                        log.created_at > Date.now() - (args.days_to_analyze * 86400000);
+                })
+                .map((log: any) => {
+                    const payload = typeof log.payload === 'string' ? JSON.parse(log.payload) : log.payload;
+                    return `  - Quiz: "${payload.module_title}" | Question: "${payload.question}" | User answer: "${payload.user_answer}"`;
+                });
+
+            const learningSection = (learningStress.length > 0 || learningConfessions.length > 0) ? `
+## Learning Friction Analysis
+
+### Learning Difficulty Signals (${learningStress.length})
+${learningStress.length > 0 ? learningStress.join('\n') : '  (none)'}
+
+### Incorrect Quiz Answers (${learningConfessions.length})
+${learningConfessions.length > 0 ? learningConfessions.join('\n') : '  (none)'}
+
+**Teaching Improvement Opportunities:**
+- If multiple users struggle with the same module/topic, consider proposing a learning about teaching approach
+- Example: "When teaching ${learningStress.length > 0 ? 'calculus-heavy topics' : '[topic]'}, add visual diagrams before equations"
+- Focus on PEDAGOGICAL improvements, not content changes
+` : '';
+
             const dreamPrompt = `# Dream Phase Analysis
 
 You are analyzing your own behavioral logs to identify patterns and propose tactical improvements.
@@ -130,7 +168,7 @@ ${logsFormatted}
 
 ## Current Tactical Learnings (post-decay)
 ${currentLearnings}
-
+${learningSection}
 ---
 
 ## Analysis Instructions
@@ -141,14 +179,21 @@ ${currentLearnings}
    - Recurring themes in stress signals?
    - Topics that trigger confessions?
    - Gaps in tactical knowledge?
+   - Learning friction patterns (if any)?
 
 3. **Action Pattern Analysis:**
    - Which tools are used most frequently? Are there inefficiencies?
    - Do certain actions correlate with stress signals?
    - Are there repetitive action sequences that could be improved?
 
-4. **Propose Learnings (1-3 maximum):**
+4. **Teaching Pattern Analysis (if learning friction exists):**
+   - Are certain topics consistently difficult?
+   - Do quiz mistakes reveal conceptual gaps?
+   - Could teaching approach be improved for specific domains?
+
+5. **Propose Learnings (1-3 maximum):**
    - Each should reduce stress OR confessions in a specific domain
+   - Can include PEDAGOGICAL improvements based on learning friction
    - Must be TACTICAL (how to serve better), NOT ethical (conscience is frozen)
    - Max 50 words per learning
 
@@ -158,7 +203,7 @@ Format each proposal as:
 **Rationale:** [Why this would help, citing specific log patterns]
 **Proposed Text:** [The actual learning text, ≤50 words]
 
-5. **Self-Critique:**
+6. **Self-Critique:**
    - Are any proposals attempting to bypass ethical constraints? If yes, REJECT them.
    - Do proposals address real patterns, or are they overfitting to noise?
 

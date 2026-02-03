@@ -36,6 +36,7 @@ import { BrowserManager, createBrowserTools } from './agent/tools/builtin/browse
 import { createFileSystemTools } from './agent/tools/builtin/filesystem.js';
 import { createSelfModTools } from './agent/tools/builtin/selfmod.js';
 import { createMemoryTools } from './agent/tools/builtin/memory.js';
+import { registerLearningTools } from './agent/tools/builtin/learning/index.js';
 import { loadPlugins } from './plugins/loader.js';
 import { Cron } from 'croner';
 import * as path from 'path';
@@ -218,6 +219,37 @@ export function createContainer(config: AppConfig): AppContainer {
         const memoryTools = createMemoryTools(logger, memory);
         memoryTools.forEach(tool => tools.register(tool));
         logger.info('Memory tools registered (2 tools: memory_store, memory_query)');
+    }
+
+    // Learning system tools (multi-language micro-learning)
+    if (config.learning?.enabled) {
+        const defaultProvider = providers.find(p => p.id === config.defaultProvider);
+        if (!defaultProvider) {
+            logger.warn('Learning system requires a default provider — learning tools disabled');
+        } else {
+            // Get web_search tool for fallback (optional)
+            const webSearchTool = tools.getTool('web_search');
+            const webSearchFn = webSearchTool ? async (query: string) => {
+                return await tools.execute('web_search', { query });
+            } : undefined;
+
+            const learningTools = registerLearningTools({
+                sessionStore: sessions,
+                mindStore,
+                provider: defaultProvider as any,
+                model: defaultProvider.model,
+                config,
+                webSearchTool: webSearchFn,
+                channelManager: channels
+            });
+            learningTools.forEach(tool => tools.register(tool));
+            logger.info(`Learning system registered (${learningTools.length} tools: multi-language, adaptive)`);
+            if (config.learning.perplexityApiKey) {
+                logger.info('  → Perplexity API enabled for research');
+            } else {
+                logger.info('  → Using web_search fallback for research');
+            }
+        }
     }
 
     // Register Telegram-specific tools

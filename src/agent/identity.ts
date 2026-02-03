@@ -4,6 +4,17 @@ import type { MindStore } from '../mind/store.js';
 // MindStore reference — set by container at startup
 let mindStoreRef: MindStore | null = null;
 
+// User name cache — maps sessionKey to user's display name
+const userNameCache: Map<string, string> = new Map();
+
+export function setUserName(sessionKey: string, userName: string): void {
+    userNameCache.set(sessionKey, userName);
+}
+
+export function getUserName(sessionKey?: string): string | undefined {
+    return sessionKey ? userNameCache.get(sessionKey) : undefined;
+}
+
 // Cache for approved learnings (refreshed every 5 minutes)
 let learningsCache: string = '*No approved learnings yet.*';
 let learningsCacheTime: number = 0;
@@ -103,8 +114,11 @@ export async function getSystemPrompt(sessionKey?: string): Promise<string> {
 
     const learnings = getApprovedLearnings(sessionKey);
     const actionsContext = getRecentActionsContext(sessionKey);
+    const userName = getUserName(sessionKey);
 
     return `${IDENTITY.persona}
+
+${userName ? `### Current User:\nThe user's name is **${userName}**. Address them by name when appropriate.` : ''}
 
 ### Core Principles of Operation ("The Code of No Damage"):
 ${principlesStr}

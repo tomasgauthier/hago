@@ -23,6 +23,79 @@ export interface Message {
     createdAt: number;
 }
 
+// Learning System Types
+export interface LearningPath {
+    id: number;
+    sessionKey: string;
+    title: string;
+    topic: string;
+    difficulty: 'beginner' | 'intermediate' | 'advanced';
+    language: string;
+    totalDurationMin: number;
+    researchData?: string;
+    status: 'generating' | 'ready' | 'in_progress' | 'completed';
+    createdAt: number;
+    completedAt?: number;
+}
+
+export interface LearningModule {
+    id: number;
+    learningPathId: number;
+    moduleNumber: number;
+    title: string;
+    content: string;
+    estimatedTimeMin: number;
+    quizQuestions?: string;
+    completed: boolean;
+    completedAt?: number;
+    timeSpentSec: number;
+}
+
+export interface UserLearningProfile {
+    id: number;
+    sessionKey: string;
+    preferredDifficulty?: string;
+    preferredLanguage?: string;
+    avgModuleTimeSec?: number;
+    completionRate?: number;
+    quizAvgScore?: number;
+    learningStyle?: string;
+    teachingPace?: string;
+    preferredAnalogyDomains?: string;
+    lastUpdated?: number;
+}
+
+export interface UserProgress {
+    id: number;
+    sessionKey: string;
+    moduleId: number;
+    status: 'not_started' | 'in_progress' | 'completed';
+    startedAt?: number;
+    completedAt?: number;
+    timeSpentSec: number;
+    difficultyRating?: number;
+}
+
+export interface QuizAttempt {
+    id: number;
+    sessionKey: string;
+    moduleId: number;
+    questionIndex: number;
+    userAnswer: string;
+    isCorrect: boolean;
+    attemptedAt: number;
+}
+
+export interface LearningSession {
+    id: number;
+    sessionKey: string;
+    learningPathId: number;
+    startedAt: number;
+    endedAt?: number;
+    modulesCompleted: number;
+    pomodoroCompleted: boolean;
+}
+
 export class SessionStore {
     public db: Database.Database;
 
@@ -74,6 +147,104 @@ export class SessionStore {
       );
 
       CREATE INDEX IF NOT EXISTS idx_usage_session ON usage(session_id);
+
+      -- Learning System Tables
+      CREATE TABLE IF NOT EXISTS learning_paths (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        difficulty TEXT CHECK(difficulty IN ('beginner', 'intermediate', 'advanced')),
+        language TEXT DEFAULT 'en',
+        total_duration_min INTEGER DEFAULT 25,
+        research_data TEXT,
+        status TEXT CHECK(status IN ('generating', 'ready', 'in_progress', 'completed')) DEFAULT 'ready',
+        created_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        FOREIGN KEY (session_key) REFERENCES sessions(key) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS learning_modules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        learning_path_id INTEGER NOT NULL,
+        module_number INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        estimated_time_min INTEGER DEFAULT 5,
+        quiz_questions TEXT,
+        completed BOOLEAN DEFAULT 0,
+        completed_at INTEGER,
+        time_spent_sec INTEGER DEFAULT 0,
+        FOREIGN KEY (learning_path_id) REFERENCES learning_paths(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS user_learning_profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_key TEXT UNIQUE NOT NULL,
+        preferred_difficulty TEXT,
+        preferred_language TEXT,
+        avg_module_time_sec INTEGER,
+        completion_rate REAL,
+        quiz_avg_score REAL,
+        learning_style TEXT,
+        teaching_pace TEXT,
+        preferred_analogy_domains TEXT,
+        last_updated INTEGER,
+        FOREIGN KEY (session_key) REFERENCES sessions(key) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS user_progress (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_key TEXT NOT NULL,
+        module_id INTEGER NOT NULL,
+        status TEXT CHECK(status IN ('not_started', 'in_progress', 'completed')) DEFAULT 'not_started',
+        started_at INTEGER,
+        completed_at INTEGER,
+        time_spent_sec INTEGER DEFAULT 0,
+        difficulty_rating INTEGER,
+        FOREIGN KEY (module_id) REFERENCES learning_modules(id) ON DELETE CASCADE,
+        UNIQUE(session_key, module_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS quiz_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_key TEXT NOT NULL,
+        module_id INTEGER NOT NULL,
+        question_index INTEGER NOT NULL,
+        user_answer TEXT NOT NULL,
+        is_correct BOOLEAN NOT NULL,
+        attempted_at INTEGER NOT NULL,
+        FOREIGN KEY (module_id) REFERENCES learning_modules(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS poll_metadata (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        poll_id TEXT UNIQUE NOT NULL,
+        session_key TEXT NOT NULL,
+        module_id INTEGER NOT NULL,
+        question_index INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (module_id) REFERENCES learning_modules(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_poll_metadata_poll_id ON poll_metadata(poll_id);
+
+      CREATE TABLE IF NOT EXISTS learning_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_key TEXT NOT NULL,
+        learning_path_id INTEGER NOT NULL,
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER,
+        modules_completed INTEGER DEFAULT 0,
+        pomodoro_completed BOOLEAN DEFAULT 0,
+        FOREIGN KEY (learning_path_id) REFERENCES learning_paths(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_learning_paths_session ON learning_paths(session_key);
+      CREATE INDEX IF NOT EXISTS idx_modules_path ON learning_modules(learning_path_id);
+      CREATE INDEX IF NOT EXISTS idx_progress_session ON user_progress(session_key);
+      CREATE INDEX IF NOT EXISTS idx_quiz_module ON quiz_attempts(module_id);
+      CREATE INDEX IF NOT EXISTS idx_learning_sessions_path ON learning_sessions(learning_path_id);
     `);
 
         // Migration: Add tool_call_id if it doesn't exist
