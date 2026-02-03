@@ -54,9 +54,11 @@ export function registerLearningTools(deps: LearningToolsDeps): ToolDefinition[]
     }));
 
     // Tool 2: Start Learning Session (Pomodoro timer)
+    // Now sends content and creates polls directly for proper ordering
     tools.push(createLearningStartSessionTool({
         sessionStore: deps.sessionStore,
-        mindStore: deps.mindStore
+        mindStore: deps.mindStore,
+        channelManager: deps.channelManager
     }));
 
     // Tool 3: Complete Module (with Spiritual Biology integration)
