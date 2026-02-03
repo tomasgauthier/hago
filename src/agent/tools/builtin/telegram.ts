@@ -97,14 +97,24 @@ Examples:
             if (module_id !== undefined && question_index !== undefined) {
                 const sessions = container.sessions;
                 if (sessions?.db) {
-                    const realPollId = sentResult?.poll_id || `poll_${Date.now()}_${module_id}_${question_index}`;
+                    // Validate that the module exists before inserting poll metadata
+                    const moduleExists = sessions.db.prepare(
+                        'SELECT id FROM learning_modules WHERE id = ?'
+                    ).get(module_id);
 
-                    sessions.db.prepare(`
-                        INSERT INTO poll_metadata (poll_id, session_key, module_id, question_index, created_at)
-                        VALUES (?, ?, ?, ?, ?)
-                    `).run(realPollId, context.sessionKey, module_id, question_index, Date.now());
+                    if (!moduleExists) {
+                        logger.warn(`Poll created but module_id=${module_id} not found in database. Skipping poll metadata.`);
+                    } else {
+                        const realPollId = sentResult?.poll_id || `poll_${Date.now()}_${module_id}_${question_index}`;
 
-                    logger.info(`Stored poll metadata: poll_id=${realPollId} for module ${module_id}, question ${question_index}`);
+                        // Use INSERT OR REPLACE to handle retries gracefully
+                        sessions.db.prepare(`
+                            INSERT OR REPLACE INTO poll_metadata (poll_id, session_key, module_id, question_index, created_at)
+                            VALUES (?, ?, ?, ?, ?)
+                        `).run(realPollId, context.sessionKey, module_id, question_index, Date.now());
+
+                        logger.info(`Stored poll metadata: poll_id=${realPollId} for module ${module_id}, question ${question_index}`);
+                    }
                 }
             }
 
